@@ -1,0 +1,71 @@
+{
+  "id": "resp_098638708fb2cf8b0069c7944d504081959982aa20e7df4891",
+  "object": "response",
+  "created_at": 1774687309,
+  "status": "completed",
+  "background": false,
+  "billing": {
+    "payer": "developer"
+  },
+  "completed_at": 1774687310,
+  "error": null,
+  "frequency_penalty": 0.0,
+  "incomplete_details": null,
+  "instructions": "You are a senior engineer. Return only JSON matching this schema: {\"edits\":[{\"path\":\"relative/path.py\",\"content\":\"full updated file contents\"}]}. Only include files that need to change. Do not include markdown fences or commentary.",
+  "max_output_tokens": null,
+  "max_tool_calls": null,
+  "model": "gpt-4.1-2025-04-14",
+  "output": [
+    {
+      "id": "msg_098638708fb2cf8b0069c7944dbd9c81958e28c9222178be3f",
+      "type": "message",
+      "status": "completed",
+      "content": [
+        {
+          "type": "output_text",
+          "annotations": [],
+          "logprobs": [],
+          "text": "{\"edits\":[{\"path\":\"orders.py\",\"content\":\"from pricing import calculate_total\\n\\nclass OrderService:\\n    def __init__(self):\\n        self.orders = []\\n\\n    def create_order(self, price):\\n        total = calculate_total(price, 10) # Fixed: Pass 10 as tax rate percentage\\n        order = {\\n            \\\"price\\\": price,\\n            \\\"total\\\": total\\n        }\\n        self.orders.append(order)\\n        return order\\n\"}]}"
+        }
+      ],
+      "role": "assistant"
+    }
+  ],
+  "parallel_tool_calls": true,
+  "presence_penalty": 0.0,
+  "previous_response_id": null,
+  "prompt_cache_key": null,
+  "prompt_cache_retention": null,
+  "reasoning": {
+    "effort": null,
+    "summary": null
+  },
+  "safety_identifier": null,
+  "service_tier": "default",
+  "store": true,
+  "temperature": 1.0,
+  "text": {
+    "format": {
+      "type": "text"
+    },
+    "verbosity": "medium"
+  },
+  "tool_choice": "auto",
+  "tools": [],
+  "top_logprobs": 0,
+  "top_p": 1.0,
+  "truncation": "disabled",
+  "usage": {
+    "input_tokens": 301,
+    "input_tokens_details": {
+      "cached_tokens": 0
+    },
+    "output_tokens": 107,
+    "output_tokens_details": {
+      "reasoning_tokens": 0
+    },
+    "total_tokens": 408
+  },
+  "user": null,
+  "metadata": {}
+}

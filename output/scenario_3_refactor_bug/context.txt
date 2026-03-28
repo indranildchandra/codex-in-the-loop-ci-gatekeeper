@@ -1,0 +1,39 @@
+# FILE: orders.py
+from pricing import calculate_total
+
+class OrderService:
+    def __init__(self):
+        self.orders = []
+
+    def create_order(self, price):
+        total = calculate_total(price, 0.1) # Post refactored change in pricing.py this should be calculate_total(price, 10)
+        order = {
+            "price": price,
+            "total": total
+        }
+        self.orders.append(order)
+        return order
+
+# FILE: pricing.py
+def calculate_total(price, tax_rate):
+    # Refactor: tax_rate now expected as percentage (10 instead of 0.1).
+    return price + (price * (tax_rate / 100))
+
+
+# FILE: tests/test_scenario_3_refactor_bug.py
+import unittest
+
+from orders import OrderService
+
+
+class RefactorBugTests(unittest.TestCase):
+    def test_order_total_with_percentage_tax(self) -> None:
+        service = OrderService()
+
+        order = service.create_order(100)
+
+        self.assertEqual(order["total"], 110)
+
+
+if __name__ == "__main__":
+    unittest.main()

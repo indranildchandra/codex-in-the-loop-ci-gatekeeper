@@ -1,0 +1,28 @@
+# codex-ci-gatekeeper .gitignore
+
+# Environment variable
+.env
+
+# ── macOS metadata ──────────────────────────────────────────────
+.DS_Store
+**/.DS_Store
+
+# ── Python cache / test artifacts ───────────────────────────────
+__pycache__/
+**/__pycache__/
+.pytest_cache/
+
+# ── Node (if any local tooling is added to the repo) ────────────
+node_modules/
+
+# ── Tool-generated session directories ──────────────────────────
+.codex/
+
+# ── AIDLC design, tracking and auditing docs (per-machine session notes, not repo source) ──────────
+docs/
+audit/
+tasks/
+
+# Intermediate Notes
+*.orig
+TALK-PLAN.md

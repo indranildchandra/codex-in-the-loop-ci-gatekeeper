@@ -1,0 +1,71 @@
+{
+  "id": "resp_0079b19a5c19e0e90069c79449a198819780d142ad7b1803e6",
+  "object": "response",
+  "created_at": 1774687305,
+  "status": "completed",
+  "background": false,
+  "billing": {
+    "payer": "developer"
+  },
+  "completed_at": 1774687306,
+  "error": null,
+  "frequency_penalty": 0.0,
+  "incomplete_details": null,
+  "instructions": "You are a senior engineer. Return only JSON matching this schema: {\"edits\":[{\"path\":\"relative/path.py\",\"content\":\"full updated file contents\"}]}. Only include files that need to change. Do not include markdown fences or commentary.",
+  "max_output_tokens": null,
+  "max_tool_calls": null,
+  "model": "gpt-4.1-2025-04-14",
+  "output": [
+    {
+      "id": "msg_0079b19a5c19e0e90069c79449eed081979ebb55da5fc76480",
+      "type": "message",
+      "status": "completed",
+      "content": [
+        {
+          "type": "output_text",
+          "annotations": [],
+          "logprobs": [],
+          "text": "{\"edits\":[{\"path\":\"app.py\",\"content\":\"from utils import normalize_email\\n\\nclass UserStore:\\n    def __init__(self):\\n        self.users = {}\\n\\n    def add_user(self, email: str, name: str):\\n        # FIX: normalize email during add as well\\n        key = normalize_email(email)\\n        self.users[key] = name\\n\\n    def get_user(self, email: str):\\n        key = normalize_email(email)\\n        return self.users.get(key)\\n\"}]}"
+        }
+      ],
+      "role": "assistant"
+    }
+  ],
+  "parallel_tool_calls": true,
+  "presence_penalty": 0.0,
+  "previous_response_id": null,
+  "prompt_cache_key": null,
+  "prompt_cache_retention": null,
+  "reasoning": {
+    "effort": null,
+    "summary": null
+  },
+  "safety_identifier": null,
+  "service_tier": "default",
+  "store": true,
+  "temperature": 1.0,
+  "text": {
+    "format": {
+      "type": "text"
+    },
+    "verbosity": "medium"
+  },
+  "tool_choice": "auto",
+  "tools": [],
+  "top_logprobs": 0,
+  "top_p": 1.0,
+  "truncation": "disabled",
+  "usage": {
+    "input_tokens": 292,
+    "input_tokens_details": {
+      "cached_tokens": 0
+    },
+    "output_tokens": 115,
+    "output_tokens_details": {
+      "reasoning_tokens": 0
+    },
+    "total_tokens": 407
+  },
+  "user": null,
+  "metadata": {}
+}
