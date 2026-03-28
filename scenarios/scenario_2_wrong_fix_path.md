@@ -3,7 +3,7 @@
 Possible Fixes:
 
 1. Modify get_user (incorrect but tempting)
-2. Modify add_user (correct)
+2. Repair the write-path key helper (correct)
 
 Lesson:
 

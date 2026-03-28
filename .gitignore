@@ -26,3 +26,4 @@ tasks/
 # Intermediate Notes
 *.orig
 TALK-PLAN.md
+**/.gitkeep

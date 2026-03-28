@@ -1,12 +1,11 @@
 --- app.py
 +++ app.py
-@@ -5,8 +5,9 @@
+@@ -5,8 +5,8 @@
          self.users = {}
  
      def add_user(self, email: str, name: str):
 -        # BUG: inconsistent normalization (write path broken)
 -        self.users[email] = name
-+        # FIX: normalize email during add as well
 +        key = normalize_email(email)
 +        self.users[key] = name
  

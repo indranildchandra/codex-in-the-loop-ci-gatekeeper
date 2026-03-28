@@ -17,7 +17,8 @@ from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parent
 OUTPUT_DIR = REPO_ROOT / "output"
-DEFAULT_MODEL = os.getenv("OPENAI_MODEL", "gpt-4.1")
+CONFIG_PATH = REPO_ROOT / "ci_config.json"
+DEFAULT_MODEL = "gpt-4.1"
 MAX_RETRIES = 3
 
 
@@ -56,9 +57,9 @@ SCENARIOS = {
     "scenario_2_wrong_fix_path": Scenario(
         name="scenario_2_wrong_fix_path",
         title="Misleading Local Fix",
-        summary="The tempting fix is to patch the read path, but the correct fix is to normalize on write.",
+        summary="The tempting fix is to patch the read path, but the correct fix is to repair the write-path key helper.",
         context_files=(
-            "app.py",
+            "directory.py",
             "utils.py",
             "tests/test_scenario_2_wrong_fix_path.py",
         ),
@@ -69,8 +70,8 @@ SCENARIOS = {
             "Do not modify tests. "
             "Do not change API contracts. "
             "Do not patch around the bug in get_user. "
-            "Only edit the minimum code needed, preferably in app.py. "
-            "Ensure keys are normalized on write so the system invariant holds."
+            "Only edit the minimum code needed, preferably in directory.py. "
+            "Preserve the normalized-read behavior and repair the write-path key helper so the invariant holds."
         ),
     ),
     "scenario_3_refactor_bug": Scenario(
@@ -116,6 +117,26 @@ def load_dotenv() -> None:
             continue
         key, value = line.split("=", 1)
         os.environ.setdefault(key.strip(), value.strip().strip("'").strip('"'))
+
+
+def load_repo_config() -> dict:
+    if not CONFIG_PATH.exists():
+        return {}
+    raw = json.loads(CONFIG_PATH.read_text())
+    return raw if isinstance(raw, dict) else {}
+
+
+def configured_model() -> str:
+    env_model = os.getenv("OPENAI_MODEL")
+    if env_model:
+        return env_model
+
+    config = load_repo_config()
+    model = config.get("openai_model")
+    if isinstance(model, str) and model.strip():
+        return model.strip()
+
+    return DEFAULT_MODEL
 
 
 def ensure_output_dir(scenario_name: str) -> Path:
@@ -208,13 +229,15 @@ def extract_output_text(response: dict) -> str:
     return ""
 
 
-def request_edit_plan(prompt: str, context: str, model: str = DEFAULT_MODEL) -> dict:
+def request_edit_plan(prompt: str, context: str, model: str | None = None) -> dict:
     api_key = os.getenv("OPENAI_API_KEY")
     if not api_key:
         raise RuntimeError("OPENAI_API_KEY is not set. Add it to .env or export it in your shell.")
 
+    resolved_model = model or configured_model()
+
     payload = {
-        "model": model,
+        "model": resolved_model,
         "instructions": (
             "You are a senior engineer. "
             "Return only JSON matching this schema: "
@@ -367,7 +390,7 @@ def render_patch_from_edits(edits: list[dict]) -> str:
     return "".join(patch_chunks).strip()
 
 
-def generate_patch(scenario_name: str, prompt: str, model: str = DEFAULT_MODEL, write_response: bool = True) -> str:
+def generate_patch(scenario_name: str, prompt: str, model: str | None = None, write_response: bool = True) -> str:
     output_dir = ensure_output_dir(scenario_name)
     context_path = write_context_file(scenario_name, output_dir / "context.txt")
     response = request_edit_plan(prompt=prompt, context=context_path.read_text(), model=model)
@@ -390,7 +413,7 @@ def extract_patch_from_response(response_file: Path, output_file: Path | None = 
     return patch_text
 
 
-def run_demo(scenario_name: str, max_retries: int = MAX_RETRIES, model: str = DEFAULT_MODEL) -> int:
+def run_demo(scenario_name: str, max_retries: int = MAX_RETRIES, model: str | None = None) -> int:
     scenario = get_scenario(scenario_name)
     print(f"\n--- CI LOOP START ({scenario.name}) ---\n")
     ensure_output_dir(scenario_name)
@@ -448,7 +471,7 @@ def run_demo(scenario_name: str, max_retries: int = MAX_RETRIES, model: str = DE
     return 0
 
 
-def run_all(max_retries: int = MAX_RETRIES, model: str = DEFAULT_MODEL) -> int:
+def run_all(max_retries: int = MAX_RETRIES, model: str | None = None) -> int:
     print("\n=== RUNNING ALL SCENARIOS ===\n")
     results: list[tuple[str, int]] = []
 
@@ -494,7 +517,7 @@ def make_parser() -> argparse.ArgumentParser:
         default=None,
         help="Optional prompt override. Defaults to the scenario's constrained prompt.",
     )
-    generate_parser.add_argument("--model", default=DEFAULT_MODEL, help="OpenAI model to use.")
+    generate_parser.add_argument("--model", default=None, help="Optional model override. Defaults to OPENAI_MODEL, then ci_config.json, then gpt-4.1.")
 
     extract_parser = subparsers.add_parser("extract-patch", help="Extract output/<scenario>/patch.diff from an existing response file.")
     add_scenario_arg(extract_parser)
@@ -507,11 +530,11 @@ def make_parser() -> argparse.ArgumentParser:
 
     run_parser = subparsers.add_parser("run", help="Run the end-to-end demo loop for a scenario.")
     add_scenario_arg(run_parser)
-    run_parser.add_argument("--model", default=DEFAULT_MODEL, help="OpenAI model to use.")
+    run_parser.add_argument("--model", default=None, help="Optional model override. Defaults to OPENAI_MODEL, then ci_config.json, then gpt-4.1.")
     run_parser.add_argument("--max-retries", type=int, default=MAX_RETRIES, help="Number of attempts before giving up.")
 
     run_all_parser = subparsers.add_parser("run-all", help="Run the full scenario suite.")
-    run_all_parser.add_argument("--model", default=DEFAULT_MODEL, help="OpenAI model to use.")
+    run_all_parser.add_argument("--model", default=None, help="Optional model override. Defaults to OPENAI_MODEL, then ci_config.json, then gpt-4.1.")
     run_all_parser.add_argument("--max-retries", type=int, default=MAX_RETRIES, help="Number of attempts per scenario before giving up.")
 
     return parser

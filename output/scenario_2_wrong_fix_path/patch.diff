@@ -1,14 +1,13 @@
---- app.py
-+++ app.py
-@@ -5,8 +5,9 @@
+--- directory.py
++++ directory.py
+@@ -6,8 +6,8 @@
          self.users = {}
  
-     def add_user(self, email: str, name: str):
--        # BUG: inconsistent normalization (write path broken)
--        self.users[email] = name
-+        # FIX: normalize email on both read and write path
-+        key = normalize_email(email)
-+        self.users[key] = name
+     def storage_key(self, email: str) -> str:
+-        # BUG: write path uses the raw identifier instead of the canonical key.
+-        return email
++        # FIX: always use canonical normalized form as storage key
++        return normalize_email(email)
  
-     def get_user(self, email: str):
-         key = normalize_email(email)
+     def add_user(self, email: str, name: str):
+         key = self.storage_key(email)

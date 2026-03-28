@@ -1,13 +1,18 @@
-# FILE: app.py
+# FILE: directory.py
 from utils import normalize_email
 
-class UserStore:
+
+class UserDirectory:
     def __init__(self):
         self.users = {}
 
+    def storage_key(self, email: str) -> str:
+        # BUG: write path uses the raw identifier instead of the canonical key.
+        return email
+
     def add_user(self, email: str, name: str):
-        # BUG: inconsistent normalization (write path broken)
-        self.users[email] = name
+        key = self.storage_key(email)
+        self.users[key] = name
 
     def get_user(self, email: str):
         key = normalize_email(email)
@@ -23,17 +28,18 @@ def normalize_email(email: str) -> str:
 # FILE: tests/test_scenario_2_wrong_fix_path.py
 import unittest
 
-from app import UserStore
+from directory import UserDirectory
 
 
 class WrongFixPathTests(unittest.TestCase):
-    def test_user_store_normalizes_keys_on_write(self) -> None:
-        store = UserStore()
+    def test_directory_uses_canonical_storage_key(self) -> None:
+        store = UserDirectory()
 
         store.add_user("TestUser@Example.com", "Indranil")
 
         self.assertIn("testuser@example.com", store.users)
         self.assertNotIn("TestUser@Example.com", store.users)
+        self.assertEqual(store.get_user("testuser@example.com"), "Indranil")
 
 
 if __name__ == "__main__":
