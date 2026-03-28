@@ -1,13 +1,13 @@
 {
-  "id": "resp_02144a0c2d89b5860069c7b68b9e208195866d8f122820c96f",
+  "id": "resp_09e99d2b1cab79880069c7bbdc7e4481958320056e560a91bc",
   "object": "response",
-  "created_at": 1774696076,
+  "created_at": 1774697436,
   "status": "completed",
   "background": false,
   "billing": {
     "payer": "developer"
   },
-  "completed_at": 1774696077,
+  "completed_at": 1774697437,
   "error": null,
   "frequency_penalty": 0.0,
   "incomplete_details": null,
@@ -17,7 +17,7 @@
   "model": "gpt-4.1-2025-04-14",
   "output": [
     {
-      "id": "msg_02144a0c2d89b5860069c7b68d3f8c8195b31007381f2a65ff",
+      "id": "msg_09e99d2b1cab79880069c7bbdcf388819581f3a7c553262d80",
       "type": "message",
       "status": "completed",
       "content": [

@@ -6,7 +6,7 @@
      def storage_key(self, email: str) -> str:
 -        # BUG: write path uses the raw identifier instead of the canonical key.
 -        return email
-+        # FIX: always use canonical normalized form as storage key
++        # FIXED: use normalized email as the storage key
 +        return normalize_email(email)
  
      def add_user(self, email: str, name: str):

@@ -5,7 +5,7 @@
  
      def create_order(self, price):
 -        total = calculate_total(price, 0.1) # Post refactored change in pricing.py this should be calculate_total(price, 10)
-+        total = calculate_total(price, 10)  # Fixed: pass tax as percentage
++        total = calculate_total(price, 10) # Fixed tax rate to be percentage
          order = {
              "price": price,
              "total": total

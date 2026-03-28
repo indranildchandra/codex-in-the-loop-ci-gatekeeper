@@ -17,14 +17,11 @@ codex-in-the-loop-ci-gatekeeper/
 ├── pricing.py
 ├── requirements.txt
 ├── run_codex.sh
-├── audit/
-├── docs/
 ├── output/
 ├── scenarios/
 │   ├── scenario_1_integration_bug.md
 │   ├── scenario_2_wrong_fix_path.md
 │   └── scenario_3_refactor_bug.md
-├── tasks/
 └── tests/
     ├── test_scenario_1_integration_bug.py
     ├── test_scenario_2_wrong_fix_path.py
