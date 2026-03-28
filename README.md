@@ -1,4 +1,4 @@
-# Codex CI Gatekeeper Demo
+# Codex-in-the-loop CI Gatekeeper Demo
 
 This repository shows how to put a coding model inside a controlled CI loop instead of treating generation as the end of the workflow.
 
@@ -113,13 +113,6 @@ python3 ci_loop.py extract-patch --scenario scenario_3_refactor_bug
 python3 ci_loop.py apply --scenario scenario_3_refactor_bug
 python3 ci_loop.py test --scenario scenario_3_refactor_bug
 ```
-
-## Public Repo Notes
-
-- `.env` is ignored and should never be committed.
-- The repo is supposed to look broken before the loop runs.
-- `output/` is intentionally committed as demo evidence and fallback material.
-- Python cache directories are ignored.
 
 ## Repo Summary
 
