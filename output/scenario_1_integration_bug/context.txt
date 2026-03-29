@@ -1,5 +1,6 @@
-# FILE: app.py
+# FILE: user_store.py
 from utils import normalize_email
+
 
 class UserStore:
     def __init__(self):
@@ -23,7 +24,7 @@ def normalize_email(email: str) -> str:
 # FILE: tests/test_scenario_1_integration_bug.py
 import unittest
 
-from app import UserStore
+from user_store import UserStore
 
 
 class IntegrationBugTests(unittest.TestCase):

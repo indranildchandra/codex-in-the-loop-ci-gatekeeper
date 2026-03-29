@@ -8,11 +8,11 @@ codex-in-the-loop-ci-gatekeeper/
 ├── README.md
 ├── REPO_STRUCTURE.md
 ├── apply_patch.sh
-├── app.py
+├── user_store.py
 ├── ci_config.json
 ├── ci_loop.py
 ├── context_builder.sh
-├── directory.py
+├── user_registry.py
 ├── orders.py
 ├── pricing.py
 ├── requirements.txt
@@ -32,8 +32,8 @@ codex-in-the-loop-ci-gatekeeper/
 
 - `ci_loop.py`: main CI gatekeeper loop, artifact generation, patch application, and validation
 - `ci_config.json`: repo-local default model configuration
-- `app.py`: scenario 1 buggy baseline
-- `directory.py`: scenario 2 buggy baseline
+- `user_store.py`: scenario 1 buggy baseline
+- `user_registry.py`: scenario 2 buggy baseline
 - `orders.py` and `pricing.py`: scenario 3 buggy baseline
 - `output/`: generated `context.txt`, `response.json`, and `patch.diff` artifacts
 - `scenarios/`: operator-facing scenario notes

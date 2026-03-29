@@ -19,7 +19,7 @@ python3 ci_loop.py list-scenarios
 Expected:
 
 - Three scenarios are listed.
-- `scenario_2_wrong_fix_path` now targets `directory.py`, not `app.py`.
+- `scenario_2_wrong_fix_path` now targets `user_registry.py`, not `user_store.py`.
 
 ## 2. Show the intentionally buggy baseline
 
@@ -32,8 +32,8 @@ python3 ci_loop.py test --scenario scenario_3_refactor_bug
 Expected:
 
 - All three commands fail.
-- Scenario 1 fails in `app.py`.
-- Scenario 2 fails in `directory.py`.
+- Scenario 1 fails in `user_store.py`.
+- Scenario 2 fails in `user_registry.py`.
 - Scenario 3 fails in `orders.py`.
 
 ## 3. Run the full live sweep
@@ -45,7 +45,7 @@ python3 ci_loop.py run-all --max-retries 2
 Expected:
 
 - Each scenario generates `context.txt`, `response.json`, and `patch.diff` under `output/<scenario>/`.
-- The generated patches target `app.py`, `directory.py`, and `orders.py` respectively.
+- The generated patches target `user_store.py`, `user_registry.py`, and `orders.py` respectively.
 - Each scenario passes validation after the generated patch is applied.
 - The repo is restored to the intentionally broken baseline after each accepted run.
 
@@ -59,8 +59,8 @@ cat output/scenario_3_refactor_bug/patch.diff
 
 Expected:
 
-- Scenario 1 shows a write-path normalization fix in `app.py`.
-- Scenario 2 shows a storage-key fix in `directory.py`.
+- Scenario 1 shows a write-path normalization fix in `user_store.py`.
+- Scenario 2 shows a storage-key fix in `user_registry.py`.
 - Scenario 3 shows the tax-call fix in `orders.py`.
 
 ## 5. Offline fallback if network fails

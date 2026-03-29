@@ -1,6 +1,6 @@
 import unittest
 
-from app import UserStore
+from user_store import UserStore
 
 
 class IntegrationBugTests(unittest.TestCase):

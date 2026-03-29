@@ -123,9 +123,9 @@ Changing the model value does not remove the OpenAI API dependency. This impleme
 All scenario files under `scenarios/` map to runnable demo flows:
 
 - `scenario_1_integration_bug`
-  Write/read inconsistency in `app.py`
+  Write/read inconsistency in `user_store.py`
 - `scenario_2_wrong_fix_path`
-  Tempting local fix vs systemic fix in `directory.py`
+  Tempting local fix vs systemic fix in `user_registry.py`
 - `scenario_3_refactor_bug`
   Contract drift between `orders.py` and `pricing.py`
 
@@ -201,8 +201,8 @@ Short version:
 
 Verified current artifact targets:
 
-- `scenario_1_integration_bug` -> `app.py`
-- `scenario_2_wrong_fix_path` -> `directory.py`
+- `scenario_1_integration_bug` -> `user_store.py`
+- `scenario_2_wrong_fix_path` -> `user_registry.py`
 - `scenario_3_refactor_bug` -> `orders.py`
 
 These artifacts are intentionally kept in the repo so you have a fallback demo trail even if the live API call fails on stage.

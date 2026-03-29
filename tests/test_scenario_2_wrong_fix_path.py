@@ -1,11 +1,11 @@
 import unittest
 
-from directory import UserDirectory
+from user_registry import UserRegistry
 
 
 class WrongFixPathTests(unittest.TestCase):
-    def test_directory_uses_canonical_storage_key(self) -> None:
-        store = UserDirectory()
+    def test_registry_uses_canonical_storage_key(self) -> None:
+        store = UserRegistry()
 
         store.add_user("TestUser@Example.com", "Indranil")
 

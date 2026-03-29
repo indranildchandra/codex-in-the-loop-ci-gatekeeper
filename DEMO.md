@@ -82,7 +82,7 @@ python3 ci_loop.py run-all --max-retries 2
 
 ### Bug
 
-- `app.py` writes the raw email into `self.users`
+- `user_store.py` writes the raw email into `self.users`
 - `get_user()` reads using `normalize_email()`
 - write path and read path disagree
 
@@ -138,7 +138,7 @@ The model is not being rewarded for changing code anywhere. It is being rewarded
 
 ### Bug
 
-- `directory.py` has a broken `storage_key()` helper
+- `user_registry.py` has a broken `storage_key()` helper
 - it returns the raw email instead of the canonical normalized key
 - this is a tempting wrong-fix-path scenario
 
@@ -147,7 +147,7 @@ The model is not being rewarded for changing code anywhere. It is being rewarded
 ```python
 from utils import normalize_email
 
-class UserDirectory:
+class UserRegistry:
     def __init__(self):
         self.users = {}
 

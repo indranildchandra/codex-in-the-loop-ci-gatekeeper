@@ -59,7 +59,7 @@ python3 ci_loop.py test --scenario scenario_3_refactor_bug
 Expected results:
 
 - scenario 1 fails because the write path and read path disagree
-- scenario 2 fails because `directory.py` computes the storage key incorrectly on write
+- scenario 2 fails because `user_registry.py` computes the storage key incorrectly on write
 - scenario 3 fails because the pricing contract changed and the caller did not
 
 Those failures are expected. Do not "clean up" the repo before the demo; the broken baseline is the input to the loop.
@@ -90,8 +90,8 @@ What happens:
 
 Verified current behavior:
 
-- scenario 1 produces a patch for `app.py`
-- scenario 2 produces a patch for `directory.py`
+- scenario 1 produces a patch for `user_store.py`
+- scenario 2 produces a patch for `user_registry.py`
 - scenario 3 produces a patch for `orders.py`
 - after each accepted run, the repo is restored to the intentionally failing baseline
 
@@ -183,7 +183,7 @@ python3 ci_loop.py test --scenario scenario_3_refactor_bug
 ## Design Notes
 
 - Scenario markdown files are not part of the default automated context.
-- Scenario 2 is intentionally separate from scenario 1 and now targets `directory.py`, so it demonstrates the same architectural lesson through a distinct code change.
+- Scenario 2 is intentionally separate from scenario 1 and now targets `user_registry.py`, so it demonstrates the same architectural lesson through a distinct code change.
 - Scenario 3 is now live in code, not just documented in a markdown note.
 - The automated path is more reliable because it asks for structured edits and renders diffs locally.
 - The word "Codex" in the repo name refers to the coding-agent role in the loop; the actual API transport in this implementation is the OpenAI Responses API.

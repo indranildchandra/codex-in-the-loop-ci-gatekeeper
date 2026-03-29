@@ -39,7 +39,7 @@ SCENARIOS = {
         title="Write/Read Path Inconsistency",
         summary="The write path stores raw email while the read path normalizes it.",
         context_files=(
-            "app.py",
+            "user_store.py",
             "utils.py",
             "tests/test_scenario_1_integration_bug.py",
         ),
@@ -50,7 +50,7 @@ SCENARIOS = {
             "Do not modify tests. "
             "Do not change API contracts. "
             "Preserve the read path. "
-            "Only edit the minimum code needed, preferably in app.py. "
+            "Only edit the minimum code needed, preferably in user_store.py. "
             "Ensure consistent normalization across write and read paths."
         ),
     ),
@@ -59,7 +59,7 @@ SCENARIOS = {
         title="Misleading Local Fix",
         summary="The tempting fix is to patch the read path, but the correct fix is to repair the write-path key helper.",
         context_files=(
-            "directory.py",
+            "user_registry.py",
             "utils.py",
             "tests/test_scenario_2_wrong_fix_path.py",
         ),
@@ -70,7 +70,7 @@ SCENARIOS = {
             "Do not modify tests. "
             "Do not change API contracts. "
             "Do not patch around the bug in get_user. "
-            "Only edit the minimum code needed, preferably in directory.py. "
+            "Only edit the minimum code needed, preferably in user_registry.py. "
             "Preserve the normalized-read behavior and repair the write-path key helper so the invariant holds."
         ),
     ),
