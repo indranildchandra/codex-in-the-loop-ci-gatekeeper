@@ -8,7 +8,7 @@ This file is the single-screen walkthrough for the live demo.
 
 It only shows the broken baseline.
 
-`python3 ci_loop.py run-all --max-retries 2` is the actual gatekeeper loop:
+`python3 ci_loop.py run-all --max-retries 1` is the actual gatekeeper loop for the default local path:
 
 1. build context
 2. call the model
@@ -21,39 +21,46 @@ The point of the demo is not "the model wrote code."
 
 The point is "the loop decides whether the change is safe."
 
-## Architecture
+## Two Operating Modes
 
 ```text
-        +------------------+
-        |   Codebase       |
-        +--------+---------+
-                 |
-                 v
-        +------------------+
-        | Context Builder  |
-        +--------+---------+
-                 |
-                 v
-        +------------------+
-        |     Codex        |
-        |  (Diff Gen)      |
-        +--------+---------+
-                 |
-                 v
-        +------------------+
-        |   Patch (Diff)   |
-        +--------+---------+
-                 |
-                 v
-        +------------------+
-        | Validation Layer |
-        | Tests / Lint     |
-        +--------+---------+
-                 |
-        +--------+---------+
-        |                  |
-        v                  v
-      Accept             Reject
+Local developer path
+    code change
+        ↓
+    ci_loop.py run-all
+        ↓
+    context.txt
+        ↓
+    codex exec
+        ↓
+    response.md
+        ↓
+    patch.diff
+        ↓
+    tests
+        ↓
+    accept or reject before commit
+```
+
+```text
+Remote CI path
+    remote commit on UAT/prod-tagged branch
+        ↓
+    Jenkins post-commit trigger
+        ↓
+    ci_loop.py run-all --backend openai_responses_api
+        ↓
+    context.txt
+        ↓
+    OpenAI Responses API
+        ↓
+    response.json
+        ↓
+    patch.diff
+        ↓
+    tests / CI checks
+        ↓
+    mark build success, failure, or retry
 ```
 
 ## Demo Flow
@@ -75,8 +82,117 @@ python3 ci_loop.py test --scenario scenario_3_refactor_bug
 Run the full gatekeeper loop:
 
 ```bash
-python3 ci_loop.py run-all --max-retries 2
+python3 ci_loop.py run-all --max-retries 1
 ```
+
+Run the local Codex path explicitly:
+
+```bash
+python3 ci_loop.py run-all --backend codex --max-retries 1
+```
+
+Run the remote CI path explicitly:
+
+```bash
+python3 ci_loop.py run-all --backend openai_responses_api --max-retries 2
+```
+
+## Manual Test Path
+
+Yes, you can test both backends manually now.
+
+Use this sequence if you want to prove the flow step by step instead of running the full sweep immediately.
+
+### 1. Prove the broken baseline
+
+```bash
+python3 ci_loop.py test --scenario scenario_1_integration_bug
+python3 ci_loop.py test --scenario scenario_2_wrong_fix_path
+python3 ci_loop.py test --scenario scenario_3_refactor_bug
+```
+
+Expected:
+
+- all three fail
+- that confirms the repo is still in the intentionally broken demo state
+
+### 2. Manually test the local `codex` backend
+
+Generate one patch:
+
+```bash
+python3 ci_loop.py generate-patch --scenario scenario_1_integration_bug
+```
+
+Inspect the local-backend artifacts:
+
+```bash
+cat output/scenario_1_integration_bug/context.txt
+glow output/scenario_1_integration_bug/response.md || cat output/scenario_1_integration_bug/response.md
+glow output/scenario_1_integration_bug/patch.diff || cat output/scenario_1_integration_bug/patch.diff
+```
+
+Run the full local backend:
+
+```bash
+python3 ci_loop.py run-all --backend codex --max-retries 1
+```
+
+What to say:
+
+- this is the local developer path
+- it is suitable for a pre-commit or pre-push style guard
+- the raw backend artifact is `response.md`
+
+### 3. Manually test the remote `openai_responses_api` backend
+
+Generate one patch:
+
+```bash
+python3 ci_loop.py generate-patch --scenario scenario_1_integration_bug --backend openai_responses_api
+```
+
+Inspect the remote-backend artifacts:
+
+```bash
+cat output/scenario_1_integration_bug/context.txt
+cat output/scenario_1_integration_bug/response.json | jq .
+glow output/scenario_1_integration_bug/patch.diff || cat output/scenario_1_integration_bug/patch.diff
+```
+
+Run the full remote backend:
+
+```bash
+python3 ci_loop.py run-all --backend openai_responses_api --max-retries 2
+```
+
+What to say:
+
+- this is the CI pipeline path
+- it is suitable for Jenkins or another remote post-commit gate
+- the raw backend artifact is `response.json`
+
+Terminal viewing tip:
+
+- use `jq` for `response.json`
+- use `glow <file>.md` if you have `glow` installed
+- otherwise use `cat <file>` as the portable fallback
+- `patch.diff` also looks better through `glow`, so the demo commands use it there too
+
+### 4. What "working" means
+
+For both backends, working means:
+
+- the baseline test fails before generation
+- the backend produces a patch for the correct target file
+- the scenario test passes after patch application
+- the repo is restored to the intentionally broken baseline after the accepted run
+
+## Default Path
+
+The default backend is now `codex`, so the manual path above does not require `OPENAI_API_KEY`.
+
+If you want to force the OpenAI backup route, pass `--backend openai_responses_api` and provide `OPENAI_API_KEY`.
 
 ## Scenario 1: Write/Read Path Inconsistency
 
@@ -270,7 +386,7 @@ This is not a syntax bug. It is a refactor contract bug. The right fix is not �
 ## What The Artifacts Mean
 
 - `context.txt`: what the model saw
-- `response.json`: raw API/model output
+- `response.json` or `response.md`: raw backend output, depending on whether the loop used `openai_responses_api` or `codex`
 - `patch.diff`: the concrete change rendered locally and applied for validation
 
 ## One-Line Summary Per Scenario

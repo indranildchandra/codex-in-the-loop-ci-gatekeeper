@@ -6,16 +6,31 @@ Each scenario starts with a failing system behavior. The loop builds context, as
 
 The repository is intentionally kept in a buggy baseline state for the demo. The CI loop is supposed to fix those bugs and rerun the tests to confirm whether the fix actually worked.
 
-This is intended to model a CI deployment such as Jenkins. In a real setup, `ci_loop.py` would be triggered by each remote commit or pull-request build and would act like a post-commit gate that decides whether the build should be marked success, failure, or retry based on validation results.
+This repo supports two intended operating modes:
+
+- `codex` is the default local development path, where the loop acts like a pre-commit or pre-push quality gate
+- `openai_responses_api` is the backup remote CI path, where Jenkins or a similar system runs the loop after commits on UAT or prod-tagged branches
+
+In both modes, `ci_loop.py` is the gatekeeper that decides whether the generated patch is acceptable.
 
 ## Setup
 
-- The demo runner loads `OPENAI_API_KEY` from `.env` automatically.
-- A valid OpenAI API key is required for the live generation path.
-- Live patch generation also requires network access to the OpenAI Responses API.
+- The demo runner loads `OPENAI_API_KEY` from `.env` automatically for the backup route.
+- The default backend is stored in `ci_config.json` and currently set to `codex`.
+- The `codex` path does not require an OpenAI API key.
+- Live patch generation on the backup route requires network access to the OpenAI Responses API and a valid OpenAI API key.
 - The repo default model is stored in `ci_config.json` and currently set to `gpt-4.1`.
+- `CI_LOOP_BACKEND` overrides the repo config for a given environment.
 - `OPENAI_MODEL` overrides the repo config for a given environment.
+- `--backend` overrides the backend for a specific command invocation.
 - `--model` overrides both for a specific command invocation.
+
+Backend precedence:
+
+1. `--backend`
+2. `CI_LOOP_BACKEND`
+3. `ci_config.json`
+4. built-in fallback: `openai_responses_api`
 
 Model precedence:
 
@@ -26,13 +41,81 @@ Model precedence:
 
 How to change it:
 
-- Edit `ci_config.json` to change the repo default.
+- Edit `ci_config.json` to change the repo default backend or model.
+- Set `CI_LOOP_BACKEND` in CI if you want an environment-specific backend override.
 - Set `OPENAI_MODEL` in CI if you want an environment-specific override.
 - Pass `--model` if you want a one-off override for a single run.
 
 Important architecture note:
 
-Changing the model value does not make this repo run "inside Codex" without OpenAI API dependency. The current implementation still sends HTTP requests to the OpenAI Responses API. To remove that dependency, `ci_loop.py` would need a separate backend implementation.
+The default path now runs through `codex`, so the repo can be used without any OpenAI API key dependency when you stay on the local backend. The backup path still sends HTTP requests to the OpenAI Responses API.
+
+Backend runtime requirements:
+
+- `codex`: requires a working authenticated Codex CLI session plus available Codex usage quota
+- `openai_responses_api`: requires `OPENAI_API_KEY` and network access
+
+## Operating Modes
+
+### Local development mode: `codex`
+
+Use this backend when you want the loop to run close to the developer before code is committed.
+
+```text
+Local code change
+        ↓
+Pre-commit or pre-push style trigger
+        ↓
+ci_loop.py run-all --backend codex
+        ↓
+context.txt
+        ↓
+codex exec
+        ↓
+response.md
+        ↓
+patch.diff
+        ↓
+tests / local checks
+        ↓
+accept or reject before commit
+```
+
+Recommended command:
+
+```bash
+python3 ci_loop.py run-all --max-retries 1
+```
+
+### Remote CI mode: `openai_responses_api`
+
+Use this backend when the loop is running as a deployment gate in Jenkins or another remote pipeline.
+
+```text
+Remote commit on UAT/prod-tagged branch
+        ↓
+Jenkins post-commit build
+        ↓
+ci_loop.py run-all --backend openai_responses_api
+        ↓
+context.txt
+        ↓
+OpenAI Responses API
+        ↓
+response.json
+        ↓
+patch.diff
+        ↓
+tests / lint / static checks
+        ↓
+mark build success, failure, or retry
+```
+
+Recommended command:
+
+```bash
+python3 ci_loop.py run-all --backend openai_responses_api --max-retries 2
+```
 
 ## List Scenarios
 
@@ -75,15 +158,27 @@ python3 ci_loop.py run --scenario scenario_1_integration_bug
 Run the full scenario sweep:
 
 ```bash
-python3 ci_loop.py run-all --max-retries 2
+python3 ci_loop.py run-all --max-retries 1
+```
+
+Run the local developer path explicitly:
+
+```bash
+python3 ci_loop.py run-all --backend codex --max-retries 1
+```
+
+Run the remote CI path explicitly:
+
+```bash
+python3 ci_loop.py run-all --backend openai_responses_api --max-retries 2
 ```
 
 What happens:
 
 1. scenario-specific context is built
-2. the OpenAI Responses API is called with that context and prompt
-3. the model returns structured edits in `response.json`
-4. `patch.diff` is rendered locally from those edits
+2. the configured backend is called with that context and prompt
+3. the backend writes a raw artifact such as `response.json` or `response.md`
+4. `patch.diff` is rendered locally from the backend output
 5. the patch is applied with `patch`
 6. only the selected scenario test target is validated
 7. the change is accepted or the files are restored
@@ -94,19 +189,21 @@ Verified current behavior:
 - scenario 2 produces a patch for `user_registry.py`
 - scenario 3 produces a patch for `orders.py`
 - after each accepted run, the repo is restored to the intentionally failing baseline
+- the full sweep passes on both `codex` and `openai_responses_api`
 
 ## Artifact Guide
 
-Each scenario produces three primary files under `output/<scenario>/`:
+Each scenario produces stable input/output artifacts under `output/<scenario>/`:
 
 - `context.txt`: the repo snapshot and test context sent to the model
-- `response.json`: the raw Responses API payload returned by OpenAI
-- `patch.diff`: the reviewable unified diff rendered locally from `response.json`
+- `response.json`: the raw Responses API payload returned by OpenAI for the `openai_responses_api` backend
+- `response.md`: the raw backend log for the `codex` backend
+- `patch.diff`: the reviewable unified diff rendered locally from backend output
 
 How to use them:
 
 1. Read `context.txt` to understand the exact input state.
-2. Read `response.json` to inspect the raw API output.
+2. Read the backend-specific raw artifact to inspect generator output.
 3. Read `patch.diff` to inspect the concrete code change.
 4. Apply and validate the patch with the CLI commands if you want to replay the flow locally.
 
@@ -186,4 +283,4 @@ python3 ci_loop.py test --scenario scenario_3_refactor_bug
 - Scenario 2 is intentionally separate from scenario 1 and now targets `user_registry.py`, so it demonstrates the same architectural lesson through a distinct code change.
 - Scenario 3 is now live in code, not just documented in a markdown note.
 - The automated path is more reliable because it asks for structured edits and renders diffs locally.
-- The word "Codex" in the repo name refers to the coding-agent role in the loop; the actual API transport in this implementation is the OpenAI Responses API.
+- The repo now supports two generation transports: OpenAI Responses API for remote CI and a Codex CLI worker path for local developer-time validation.

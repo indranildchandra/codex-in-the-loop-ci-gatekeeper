@@ -4,10 +4,12 @@ Run these commands in order during the live demo.
 
 ## 0. Prerequisites
 
-- Ensure `.env` contains a valid `OPENAI_API_KEY`.
+- The repo default backend lives in `ci_config.json` and is currently `codex`.
+- The `codex` path does not require `OPENAI_API_KEY`.
+- The OpenAI backup route does require `OPENAI_API_KEY`.
 - The repo default model lives in `ci_config.json` and is currently `gpt-4.1`.
-- The live sweep calls the OpenAI Responses API, so network access must be available.
-- This demo is meant to represent a CI gate such as a Jenkins job triggered after a remote commit.
+- The local `codex` backend is the default development path and is best explained as a pre-commit or pre-push quality gate.
+- The `openai_responses_api` backend is the backup CI path and is best explained as a Jenkins post-commit gate on UAT or prod-tagged branches.
 - The baseline is intentionally broken before the run. Failing tests in step 2 are expected.
 
 ## 1. List the scenarios
@@ -19,7 +21,6 @@ python3 ci_loop.py list-scenarios
 Expected:
 
 - Three scenarios are listed.
-- `scenario_2_wrong_fix_path` now targets `user_registry.py`, not `user_store.py`.
 
 ## 2. Show the intentionally buggy baseline
 
@@ -36,10 +37,10 @@ Expected:
 - Scenario 2 fails in `user_registry.py`.
 - Scenario 3 fails in `orders.py`.
 
-## 3. Run the full live sweep
+## 3. Run the remote CI sweep
 
 ```bash
-python3 ci_loop.py run-all --max-retries 2
+python3 ci_loop.py run-all --backend openai_responses_api --max-retries 2
 ```
 
 Expected:
@@ -49,7 +50,52 @@ Expected:
 - Each scenario passes validation after the generated patch is applied.
 - The repo is restored to the intentionally broken baseline after each accepted run.
 
-## 4. Show the saved artifacts
+## 4. Manually inspect the local default backend on one scenario
+
+```bash
+python3 ci_loop.py generate-patch --scenario scenario_1_integration_bug
+cat output/scenario_1_integration_bug/context.txt
+glow output/scenario_1_integration_bug/response.md || cat output/scenario_1_integration_bug/response.md
+glow output/scenario_1_integration_bug/patch.diff || cat output/scenario_1_integration_bug/patch.diff
+```
+
+Expected:
+
+- `context.txt` shows the exact prompt input state
+- `response.md` shows the raw Codex output
+- `patch.diff` shows the concrete repair against `user_store.py`
+- No OpenAI API key is needed for this path
+
+## 5. Run the local developer sweep
+
+```bash
+python3 ci_loop.py run-all --max-retries 1
+```
+
+Expected:
+
+- Each scenario generates `context.txt`, `response.md`, and `patch.diff` under `output/<scenario>/`.
+- The generated patches still target `user_store.py`, `user_registry.py`, and `orders.py`.
+- Each scenario passes validation after the generated patch is applied.
+- This is the clean demo path for "run before commit."
+
+## 6. Manually inspect the OpenAI backup backend on one scenario
+
+```bash
+python3 ci_loop.py generate-patch --scenario scenario_1_integration_bug --backend openai_responses_api
+cat output/scenario_1_integration_bug/context.txt
+cat output/scenario_1_integration_bug/response.json | jq .
+glow output/scenario_1_integration_bug/patch.diff || cat output/scenario_1_integration_bug/patch.diff
+```
+
+Expected:
+
+- `context.txt` shows the exact prompt input state
+- `response.json` shows the raw OpenAI Responses API output
+- `patch.diff` shows the concrete repair against `user_store.py`
+- This path requires `OPENAI_API_KEY`
+
+## 7. Show the saved artifacts
 
 ```bash
 cat output/scenario_1_integration_bug/patch.diff
@@ -62,19 +108,3 @@ Expected:
 - Scenario 1 shows a write-path normalization fix in `user_store.py`.
 - Scenario 2 shows a storage-key fix in `user_registry.py`.
 - Scenario 3 shows the tax-call fix in `orders.py`.
-
-## 5. Offline fallback if network fails
-
-```bash
-cat output/scenario_1_integration_bug/context.txt
-cat output/scenario_1_integration_bug/response.json
-cat output/scenario_2_wrong_fix_path/context.txt
-cat output/scenario_2_wrong_fix_path/response.json
-cat output/scenario_3_refactor_bug/context.txt
-cat output/scenario_3_refactor_bug/response.json
-```
-
-Expected:
-
-- The saved artifacts let you walk through the previous successful run without making a live API call.
-- If you changed scenario code or prompts recently, regenerate the artifacts before the demo so they stay current.

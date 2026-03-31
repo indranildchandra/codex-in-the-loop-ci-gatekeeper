@@ -35,6 +35,6 @@ codex-in-the-loop-ci-gatekeeper/
 - `user_store.py`: scenario 1 buggy baseline
 - `user_registry.py`: scenario 2 buggy baseline
 - `orders.py` and `pricing.py`: scenario 3 buggy baseline
-- `output/`: generated `context.txt`, `response.json`, and `patch.diff` artifacts
+- `output/`: generated `context.txt`, backend raw artifacts such as `response.json` or `response.md`, and `patch.diff`
 - `scenarios/`: operator-facing scenario notes
 - `tests/`: scenario-specific validators used by the loop

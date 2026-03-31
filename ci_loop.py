@@ -8,6 +8,7 @@ import re
 import shutil
 import subprocess
 import sys
+import tempfile
 import time
 import urllib.error
 import urllib.request
@@ -19,6 +20,8 @@ REPO_ROOT = Path(__file__).resolve().parent
 OUTPUT_DIR = REPO_ROOT / "output"
 CONFIG_PATH = REPO_ROOT / "ci_config.json"
 DEFAULT_MODEL = "gpt-4.1"
+DEFAULT_BACKEND = "codex"
+OPENAI_BACKUP_BACKEND = "openai_responses_api"
 MAX_RETRIES = 3
 
 
@@ -31,6 +34,16 @@ class Scenario:
     test_targets: tuple[str, ...]
     base_prompt: str
     constrained_prompt: str
+
+
+@dataclass(frozen=True)
+class BackendResult:
+    backend: str
+    raw_artifact_name: str
+    raw_artifact_payload: str
+    edits: tuple[dict, ...] = ()
+    patch_text: str | None = None
+    error_message: str | None = None
 
 
 SCENARIOS = {
@@ -139,6 +152,93 @@ def configured_model() -> str:
     return DEFAULT_MODEL
 
 
+def configured_codex_model() -> str | None:
+    env_model = os.getenv("CODEX_MODEL")
+    if env_model:
+        return env_model
+
+    settings = backend_settings("codex")
+    model = settings.get("model")
+    if isinstance(model, str) and model.strip():
+        return model.strip()
+
+    return None
+
+
+def configured_backend() -> str:
+    env_backend = os.getenv("CI_LOOP_BACKEND")
+    if env_backend:
+        return normalize_backend_name(env_backend)
+
+    config = load_repo_config()
+    backend = config.get("backend")
+    if isinstance(backend, str) and backend.strip():
+        normalized_backend = normalize_backend_name(backend.strip())
+        if normalized_backend in {DEFAULT_BACKEND, OPENAI_BACKUP_BACKEND}:
+            return normalized_backend
+        return DEFAULT_BACKEND
+
+    return DEFAULT_BACKEND
+
+
+def backend_settings(backend: str) -> dict:
+    normalized_backend = normalize_backend_name(backend)
+    config = load_repo_config()
+    settings = config.get("backend_settings", {})
+    if not isinstance(settings, dict):
+        return {}
+    backend_config = settings.get(normalized_backend, {})
+    return backend_config if isinstance(backend_config, dict) else {}
+
+
+def configured_raw_artifact_name(backend: str) -> str:
+    normalized_backend = normalize_backend_name(backend)
+    config = load_repo_config()
+    raw_artifact_name = config.get("raw_artifact_name")
+    if isinstance(raw_artifact_name, str) and raw_artifact_name.strip():
+        return raw_artifact_name.strip()
+    if normalized_backend == "openai_responses_api":
+        return "response.json"
+    if normalized_backend == "codex":
+        return "response.md"
+    return "backend_response.txt"
+
+
+def normalize_backend_name(backend: str) -> str:
+    return backend
+
+
+def resolve_repo_relative_path(relative_path: str) -> Path:
+    candidate = (REPO_ROOT / relative_path).resolve()
+    try:
+        candidate.relative_to(REPO_ROOT)
+    except ValueError as exc:
+        raise RuntimeError(f"Edit path escapes the repo root: {relative_path}") from exc
+    return candidate
+
+
+def markdown_fence(text: str, language: str = "") -> str:
+    return f"```{language}\n{text}\n```"
+
+
+def extract_codex_exec_error(stdout: str) -> str | None:
+    for line in stdout.splitlines():
+        line = line.strip()
+        if not line.startswith("{"):
+            continue
+        try:
+            event = json.loads(line)
+        except json.JSONDecodeError:
+            continue
+        if event.get("type") == "error" and isinstance(event.get("message"), str):
+            return event["message"]
+        if event.get("type") == "turn.failed":
+            error = event.get("error")
+            if isinstance(error, dict) and isinstance(error.get("message"), str):
+                return error["message"]
+    return None
+
+
 def ensure_output_dir(scenario_name: str) -> Path:
     path = OUTPUT_DIR / scenario_name
     path.mkdir(parents=True, exist_ok=True)
@@ -229,12 +329,15 @@ def extract_output_text(response: dict) -> str:
     return ""
 
 
-def request_edit_plan(prompt: str, context: str, model: str | None = None) -> dict:
+def request_edit_plan_via_openai(prompt: str, context: str, model: str | None = None) -> BackendResult:
     api_key = os.getenv("OPENAI_API_KEY")
     if not api_key:
         raise RuntimeError("OPENAI_API_KEY is not set. Add it to .env or export it in your shell.")
 
     resolved_model = model or configured_model()
+    settings = backend_settings("openai_responses_api")
+    endpoint = settings.get("endpoint", "https://api.openai.com/v1/responses")
+    timeout_seconds = settings.get("timeout_seconds", 60)
 
     payload = {
         "model": resolved_model,
@@ -257,7 +360,7 @@ def request_edit_plan(prompt: str, context: str, model: str | None = None) -> di
     }
 
     request = urllib.request.Request(
-        url="https://api.openai.com/v1/responses",
+        url=endpoint,
         data=json.dumps(payload).encode("utf-8"),
         headers={
             "Authorization": f"Bearer {api_key}",
@@ -267,13 +370,195 @@ def request_edit_plan(prompt: str, context: str, model: str | None = None) -> di
     )
 
     try:
-        with urllib.request.urlopen(request, timeout=60) as response:
-            return json.loads(response.read().decode("utf-8"))
+        with urllib.request.urlopen(request, timeout=timeout_seconds) as response:
+            raw_response = json.loads(response.read().decode("utf-8"))
     except urllib.error.HTTPError as exc:
         details = exc.read().decode("utf-8", errors="replace")
         raise RuntimeError(f"OpenAI API request failed with HTTP {exc.code}: {details}") from exc
     except urllib.error.URLError as exc:
         raise RuntimeError(f"OpenAI API request failed: {exc.reason}") from exc
+
+    payload_text = normalize_json_text(extract_output_text(raw_response))
+    payload_json = json.loads(payload_text)
+    edits = payload_json.get("edits", [])
+    if not isinstance(edits, list):
+        raise RuntimeError("OpenAI backend returned an invalid edits payload.")
+
+    return BackendResult(
+        backend="openai_responses_api",
+        raw_artifact_name=configured_raw_artifact_name("openai_responses_api"),
+        raw_artifact_payload=json.dumps(raw_response, indent=2),
+        edits=tuple(edits),
+    )
+
+
+def request_edit_plan_via_codex(prompt: str, context: str, model: str | None = None) -> BackendResult:
+    resolved_model = model or configured_codex_model()
+    settings = backend_settings("codex")
+    command = settings.get("command", ["codex", "exec"])
+    timeout_seconds = int(settings.get("timeout_seconds", 120))
+    sandbox_mode = str(settings.get("sandbox", "read-only"))
+    if not isinstance(command, list) or not all(isinstance(item, str) for item in command):
+        raise RuntimeError("backend_settings.codex.command must be a list of strings.")
+
+    schema = {
+        "type": "object",
+        "properties": {
+            "edits": {
+                "type": "array",
+                "items": {
+                    "type": "object",
+                    "properties": {
+                        "path": {"type": "string"},
+                        "content": {"type": "string"},
+                    },
+                    "required": ["path", "content"],
+                    "additionalProperties": False,
+                },
+            }
+        },
+        "required": ["edits"],
+        "additionalProperties": False,
+    }
+
+    codex_prompt = "\n\n".join(
+        [
+            "You are a strict senior engineer inside a CI gatekeeper worker.",
+            "Find the smallest invariant-preserving fix that makes the failing test pass.",
+            "Prefer repairing the real contract or write path over adding a workaround on the read path.",
+            "Do not change tests, do not add unrelated refactors, and do not widen the fix beyond the minimum files needed.",
+            "Think about what could break if you fix the wrong layer, and reject tempting band-aids that only hide the symptom.",
+            "Return only strict JSON matching the required schema.",
+            "Do not include markdown fences, prose, or commentary.",
+            "Do not apply changes directly to the repository.",
+            f"Scenario instructions: {prompt}",
+            "Repository context follows.",
+            context,
+        ]
+    )
+
+    with tempfile.TemporaryDirectory(prefix="codex-native-") as temp_dir:
+        temp_path = Path(temp_dir)
+        schema_path = temp_path / "schema.json"
+        last_message_path = temp_path / "last_message.json"
+        schema_path.write_text(json.dumps(schema, indent=2))
+
+        exec_args = [
+            *command,
+            "--json",
+            "--ephemeral",
+            "--sandbox",
+            sandbox_mode,
+            "-C",
+            str(REPO_ROOT),
+            "--output-schema",
+            str(schema_path),
+            "-o",
+            str(last_message_path),
+        ]
+        if resolved_model:
+            exec_args.extend(["-m", resolved_model])
+        exec_args.append("-")
+
+        completed = subprocess.run(
+            exec_args,
+            input=codex_prompt,
+            cwd=REPO_ROOT,
+            capture_output=True,
+            text=True,
+            timeout=timeout_seconds,
+        )
+
+        last_message = last_message_path.read_text().strip() if last_message_path.exists() else ""
+        stdout = completed.stdout.strip()
+        stderr = completed.stderr.strip()
+
+    command_preview = " ".join(command)
+    log_lines = [
+        "# Codex Native Backend Log",
+        "",
+        "## Status",
+        "",
+        f"- exit_code: `{completed.returncode}`",
+        f"- backend: `codex`",
+        f"- model: `{resolved_model or 'backend-default'}`",
+        f"- command: `{command_preview}`",
+        f"- sandbox: `{sandbox_mode}`",
+        "",
+        "## Prompt Preview",
+        "",
+        markdown_fence(prompt, "text"),
+        "",
+        "## Context Size",
+        "",
+        f"- characters: `{len(context)}`",
+        "",
+        "## Stdout",
+        "",
+        markdown_fence(stdout or "(no stdout)", "json"),
+        "",
+        "## Stderr",
+        "",
+        markdown_fence(stderr or "(no stderr)", "text"),
+        "",
+        "## Last Message",
+        "",
+        markdown_fence(last_message or "(no last message captured)", "json"),
+    ]
+    raw_log = "\n".join(log_lines)
+    codex_error = extract_codex_exec_error(stdout)
+
+    if completed.returncode != 0:
+        return BackendResult(
+            backend="codex",
+            raw_artifact_name=configured_raw_artifact_name("codex"),
+            raw_artifact_payload=raw_log,
+            error_message=codex_error or f"Codex native backend failed with exit code {completed.returncode}.",
+        )
+
+    if not last_message:
+        return BackendResult(
+            backend="codex",
+            raw_artifact_name=configured_raw_artifact_name("codex"),
+            raw_artifact_payload=raw_log,
+            error_message="Codex native backend did not produce a final structured message.",
+        )
+
+    try:
+        payload = json.loads(normalize_json_text(last_message))
+    except json.JSONDecodeError as exc:
+        return BackendResult(
+            backend="codex",
+            raw_artifact_name=configured_raw_artifact_name("codex"),
+            raw_artifact_payload=raw_log,
+            error_message=f"Codex native backend returned invalid JSON: {exc}",
+        )
+
+    edits = payload.get("edits", [])
+    if not isinstance(edits, list):
+        return BackendResult(
+            backend="codex",
+            raw_artifact_name=configured_raw_artifact_name("codex"),
+            raw_artifact_payload=raw_log,
+            error_message="Codex native backend returned an invalid edits payload.",
+        )
+
+    return BackendResult(
+        backend="codex",
+        raw_artifact_name=configured_raw_artifact_name("codex"),
+        raw_artifact_payload=raw_log,
+        edits=tuple(edits),
+    )
+
+
+def request_edit_plan(prompt: str, context: str, model: str | None = None, backend: str | None = None) -> BackendResult:
+    resolved_backend = backend or configured_backend()
+    resolved_backend = normalize_backend_name(resolved_backend)
+    if resolved_backend == "openai_responses_api":
+        return request_edit_plan_via_openai(prompt=prompt, context=context, model=model)
+    if resolved_backend == "codex":
+        return request_edit_plan_via_codex(prompt=prompt, context=context, model=model)
+    raise RuntimeError(f"Unsupported backend: {resolved_backend}")
 
 
 def normalize_patch_text(raw_text: str) -> str:
@@ -369,7 +654,7 @@ def render_patch_from_edits(edits: list[dict]) -> str:
         if not isinstance(relative_path, str) or not isinstance(content, str):
             raise RuntimeError("Each edit must contain string 'path' and 'content' fields.")
 
-        path = REPO_ROOT / relative_path
+        path = resolve_repo_relative_path(relative_path)
         if not path.exists():
             raise RuntimeError(f"Edit path does not exist in the repo: {relative_path}")
 
@@ -390,19 +675,31 @@ def render_patch_from_edits(edits: list[dict]) -> str:
     return "".join(patch_chunks).strip()
 
 
-def generate_patch(scenario_name: str, prompt: str, model: str | None = None, write_response: bool = True) -> str:
+def generate_patch(
+    scenario_name: str,
+    prompt: str,
+    model: str | None = None,
+    backend: str | None = None,
+    write_response: bool = True,
+) -> tuple[str, str]:
     output_dir = ensure_output_dir(scenario_name)
     context_path = write_context_file(scenario_name, output_dir / "context.txt")
-    response = request_edit_plan(prompt=prompt, context=context_path.read_text(), model=model)
+    patch_output_path = output_dir / "patch.diff"
+    if patch_output_path.exists():
+        patch_output_path.unlink()
+    result = request_edit_plan(prompt=prompt, context=context_path.read_text(), model=model, backend=backend)
     if write_response:
-        (output_dir / "response.json").write_text(json.dumps(response, indent=2))
+        (output_dir / result.raw_artifact_name).write_text(result.raw_artifact_payload)
 
-    payload_text = normalize_json_text(extract_output_text(response))
-    payload = json.loads(payload_text)
-    patch_text = render_patch_from_edits(payload.get("edits", []))
+    if result.error_message:
+        raise RuntimeError(result.error_message)
+
+    patch_text = result.patch_text or render_patch_from_edits(list(result.edits))
     if patch_text:
-        (output_dir / "patch.diff").write_text(patch_text)
-    return patch_text
+        patch_output_path.write_text(patch_text)
+        return patch_text, result.raw_artifact_name
+
+    return "", result.raw_artifact_name
 
 
 def extract_patch_from_response(response_file: Path, output_file: Path | None = None) -> str:
@@ -413,7 +710,12 @@ def extract_patch_from_response(response_file: Path, output_file: Path | None = 
     return patch_text
 
 
-def run_demo(scenario_name: str, max_retries: int = MAX_RETRIES, model: str | None = None) -> int:
+def run_demo(
+    scenario_name: str,
+    max_retries: int = MAX_RETRIES,
+    model: str | None = None,
+    backend: str | None = None,
+) -> int:
     scenario = get_scenario(scenario_name)
     print(f"\n--- CI LOOP START ({scenario.name}) ---\n")
     ensure_output_dir(scenario_name)
@@ -425,10 +727,12 @@ def run_demo(scenario_name: str, max_retries: int = MAX_RETRIES, model: str | No
         print(f"Prompt: {prompt}\n")
 
         try:
-            patch_text = generate_patch(scenario_name=scenario_name, prompt=prompt, model=model)
+            patch_text, _ = generate_patch(scenario_name=scenario_name, prompt=prompt, model=model, backend=backend)
         except Exception as exc:
             print(f"Patch generation failed: {exc}")
-            return 1
+            print("Retrying...\n")
+            time.sleep(1)
+            continue
 
         if not patch_text.strip():
             print("No patch generated. Retrying...\n")
@@ -471,12 +775,12 @@ def run_demo(scenario_name: str, max_retries: int = MAX_RETRIES, model: str | No
     return 0
 
 
-def run_all(max_retries: int = MAX_RETRIES, model: str | None = None) -> int:
+def run_all(max_retries: int = MAX_RETRIES, model: str | None = None, backend: str | None = None) -> int:
     print("\n=== RUNNING ALL SCENARIOS ===\n")
     results: list[tuple[str, int]] = []
 
     for scenario_name in scenario_choices():
-        result = run_demo(scenario_name=scenario_name, max_retries=max_retries, model=model)
+        result = run_demo(scenario_name=scenario_name, max_retries=max_retries, model=model, backend=backend)
         results.append((scenario_name, result))
 
     print("=== SCENARIO SUMMARY ===")
@@ -496,6 +800,14 @@ def add_scenario_arg(parser: argparse.ArgumentParser) -> None:
     )
 
 
+def add_backend_arg(parser: argparse.ArgumentParser) -> None:
+    parser.add_argument(
+        "--backend",
+        default=None,
+        help="Optional backend override. Defaults to CI_LOOP_BACKEND, then ci_config.json, then codex.",
+    )
+
+
 def make_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="Codex-in-the-loop CI gatekeeper demo.")
     subparsers = parser.add_subparsers(dest="command")
@@ -510,8 +822,9 @@ def make_parser() -> argparse.ArgumentParser:
     add_scenario_arg(context_parser)
     context_parser.add_argument("--output", default=None, help="Optional custom path for the built context.")
 
-    generate_parser = subparsers.add_parser("generate-patch", help="Call the OpenAI Responses API and write output artifacts for a scenario.")
+    generate_parser = subparsers.add_parser("generate-patch", help="Call the configured backend and write output artifacts for a scenario.")
     add_scenario_arg(generate_parser)
+    add_backend_arg(generate_parser)
     generate_parser.add_argument(
         "--prompt",
         default=None,
@@ -519,9 +832,9 @@ def make_parser() -> argparse.ArgumentParser:
     )
     generate_parser.add_argument("--model", default=None, help="Optional model override. Defaults to OPENAI_MODEL, then ci_config.json, then gpt-4.1.")
 
-    extract_parser = subparsers.add_parser("extract-patch", help="Extract output/<scenario>/patch.diff from an existing response file.")
+    extract_parser = subparsers.add_parser("extract-patch", help="Extract output/<scenario>/patch.diff from an existing OpenAI response JSON file.")
     add_scenario_arg(extract_parser)
-    extract_parser.add_argument("--response-file", default=None, help="Responses API JSON file to parse.")
+    extract_parser.add_argument("--response-file", default=None, help="OpenAI Responses API JSON file to parse.")
     extract_parser.add_argument("--output", default=None, help="Where to write the extracted patch.")
 
     apply_parser = subparsers.add_parser("apply", help="Apply an existing unified diff.")
@@ -530,10 +843,12 @@ def make_parser() -> argparse.ArgumentParser:
 
     run_parser = subparsers.add_parser("run", help="Run the end-to-end demo loop for a scenario.")
     add_scenario_arg(run_parser)
+    add_backend_arg(run_parser)
     run_parser.add_argument("--model", default=None, help="Optional model override. Defaults to OPENAI_MODEL, then ci_config.json, then gpt-4.1.")
     run_parser.add_argument("--max-retries", type=int, default=MAX_RETRIES, help="Number of attempts before giving up.")
 
     run_all_parser = subparsers.add_parser("run-all", help="Run the full scenario suite.")
+    add_backend_arg(run_all_parser)
     run_all_parser.add_argument("--model", default=None, help="Optional model override. Defaults to OPENAI_MODEL, then ci_config.json, then gpt-4.1.")
     run_all_parser.add_argument("--max-retries", type=int, default=MAX_RETRIES, help="Number of attempts per scenario before giving up.")
 
@@ -573,13 +888,18 @@ def main() -> int:
     if command == "generate-patch":
         scenario = get_scenario(scenario_name)
         prompt = args.prompt or scenario.constrained_prompt
-        patch_text = generate_patch(scenario_name=scenario_name, prompt=prompt, model=args.model)
+        patch_text, raw_artifact_name = generate_patch(
+            scenario_name=scenario_name,
+            prompt=prompt,
+            model=args.model,
+            backend=args.backend,
+        )
         if not patch_text:
             print("No patch text found in the model response.")
             return 1
         print(
             f"output/{scenario_name}/context.txt, "
-            f"output/{scenario_name}/response.json, and "
+            f"output/{scenario_name}/{raw_artifact_name}, and "
             f"output/{scenario_name}/patch.diff written."
         )
         return 0
@@ -614,10 +934,15 @@ def main() -> int:
         return 0 if applied else 1
 
     if command == "run":
-        return run_demo(scenario_name=scenario_name, max_retries=args.max_retries, model=args.model)
+        return run_demo(
+            scenario_name=scenario_name,
+            max_retries=args.max_retries,
+            model=args.model,
+            backend=args.backend,
+        )
 
     if command == "run-all":
-        return run_all(max_retries=args.max_retries, model=args.model)
+        return run_all(max_retries=args.max_retries, model=args.model, backend=args.backend)
 
     parser.print_help()
     return 1

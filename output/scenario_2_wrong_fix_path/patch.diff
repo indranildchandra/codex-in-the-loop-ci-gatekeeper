@@ -1,12 +1,11 @@
 --- user_registry.py
 +++ user_registry.py
-@@ -6,8 +6,8 @@
+@@ -6,8 +6,7 @@
          self.users = {}
  
      def storage_key(self, email: str) -> str:
 -        # BUG: write path uses the raw identifier instead of the canonical key.
 -        return email
-+        # FIX: use the canonical, normalized key for storage.
 +        return normalize_email(email)
  
      def add_user(self, email: str, name: str):
