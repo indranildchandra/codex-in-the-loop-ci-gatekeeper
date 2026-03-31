@@ -5,11 +5,11 @@ This repo is a small demo, but treat it like production demo infrastructure. Kee
 ## Working Rules
 
 - Plan before editing for any task with more than one obvious step.
-- Before writing to `docs/plan.md`, `tasks/todo.md`, `tasks/tracker.md`, `tasks/lessons.md`, or `audit/changelog.md`, load the matching `aidlc-tracking` format and follow it exactly.
-- Write intent to [docs/plan.md](docs/plan.md) before implementation starts.
-- Keep [tasks/todo.md](tasks/todo.md) current while working.
-- After implementation, record the change in [audit/changelog.md](audit/changelog.md) and append a task-complete entry to [tasks/tracker.md](tasks/tracker.md).
-- If a user correction exposes a reusable mistake pattern, prepend a lesson to [tasks/lessons.md](tasks/lessons.md).
+- Before writing to `docs/plan.md`, `tasks/todo.md`, `tasks/tracker.md`, `tasks/lessons.md`, or `audit/changelog.md`, load the matching `aidlc-tracking` skill format and follow it exactly.
+- Write intent to `docs/plan.md` before implementation starts.
+- Keep `tasks/todo.md` current while working.
+- After implementation, record the change in `audit/changelog.md` and append a task-complete entry to `tasks/tracker.md`.
+- If a user correction exposes a reusable mistake pattern, prepend a lesson to `tasks/lessons.md`.
 
 ## Repo Priorities
 
