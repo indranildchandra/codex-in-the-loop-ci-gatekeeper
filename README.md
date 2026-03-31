@@ -9,7 +9,7 @@ This repo is designed around two operating modes:
 - `codex` is the default local development path, where a developer runs the loop before commit as a pre-hook style quality gate
 - `openai_responses_api` is the backup remote CI path, where Jenkins or another pipeline triggers the loop after a commit lands on a UAT or prod-tagged branch
 
-In both cases, `ci_loop.py` is the gatekeeper. It is the component that decides whether a generated patch is valid enough to count as a pass.
+In both cases, [ci_loop.py](ci_loop.py) is the gatekeeper. It is the component that decides whether a generated patch is valid enough to count as a pass.
 
 ## Why This Repo Exists
 
@@ -152,7 +152,7 @@ Model resolution order is:
 
 How to change it:
 
-- Edit `ci_config.json` if you want to change the repo default backend or model.
+- Edit [ci_config.json](ci_config.json) if you want to change the repo default backend or model.
 - Set `CI_LOOP_BACKEND=...` if you want a per-environment backend override.
 - Set `OPENAI_MODEL=...` if you want a per-environment override.
 - Pass `--model ...` if you want a one-off run override.
@@ -176,11 +176,11 @@ The default backend is now `codex`, so the repo can run without any OpenAI API k
 All scenario files under `scenarios/` map to runnable demo flows:
 
 - `scenario_1_integration_bug`
-  Write/read inconsistency in `user_store.py`
+  Write/read inconsistency in [user_store.py](user_store.py)
 - `scenario_2_wrong_fix_path`
-  Tempting local fix vs systemic fix in `user_registry.py`
+  Tempting local fix vs systemic fix in [user_registry.py](user_registry.py)
 - `scenario_3_refactor_bug`
-  Contract drift between `orders.py` and `pricing.py`
+  Contract drift between [orders.py](orders.py) and [pricing.py](pricing.py)
 
 ## Core Commands
 
@@ -342,7 +342,9 @@ curl https://api.openai.com/v1/responses \
       }
     ]
   }' | tee output/scenario_3_refactor_bug/response.json
+```
 
+```bash
 python3 ci_loop.py extract-patch --scenario scenario_3_refactor_bug
 python3 ci_loop.py apply --scenario scenario_3_refactor_bug
 python3 ci_loop.py test --scenario scenario_3_refactor_bug
@@ -350,12 +352,8 @@ python3 ci_loop.py test --scenario scenario_3_refactor_bug
 
 ## Repo Summary
 
-The Codex CLI is the default local path.
+The Codex CLI is the default local path. The Responses API call is the backup route for CI or when you explicitly choose `openai_responses_api`.
 
-The Responses API call is the backup route for CI or when you explicitly choose `openai_responses_api`.
+The model is not the system. The loop is the system.
 
-The model is not the system.
-
-The loop is the system.
-
-See `PLAYBOOK.md` for the walkthrough and `DEMO-COMMANDS.md` for the live sequence.
+See [PLAYBOOK.md](PLAYBOOK.md) for the walkthrough of demo and [DEMO-COMMANDS.md](DEMO-COMMANDS.md) for the live sequence.
