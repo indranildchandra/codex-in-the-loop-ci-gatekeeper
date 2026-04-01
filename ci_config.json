@@ -1,12 +1,13 @@
 {
   "backend": "codex",
   "openai_model": "gpt-4.1",
-  "raw_artifact_name": null,
+  "git_hooks": {
+    "pre_commit_enabled": true
+  },
   "backend_settings": {
     "openai_responses_api": {
       "endpoint": "https://api.openai.com/v1/responses",
-      "timeout_seconds": 60,
-      "store_raw_json": true
+      "timeout_seconds": 60
     },
     "codex": {
       "command": [
@@ -14,11 +15,8 @@
         "exec"
       ],
       "model": null,
-      "mode": "non_interactive_worker",
       "sandbox": "read-only",
-      "timeout_seconds": 120,
-      "capture_log_markdown": true,
-      "expect_structured_edits": true
+      "timeout_seconds": 120
     }
   }
 }

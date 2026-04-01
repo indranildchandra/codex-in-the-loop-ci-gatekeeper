@@ -19,6 +19,7 @@ from pathlib import Path
 REPO_ROOT = Path(__file__).resolve().parent
 OUTPUT_DIR = REPO_ROOT / "output"
 CONFIG_PATH = REPO_ROOT / "ci_config.json"
+CODE_REVIEW_PROMPT_PATH = REPO_ROOT / "code_review.prompt"
 DEFAULT_MODEL = "gpt-4.1"
 DEFAULT_BACKEND = "codex"
 OPENAI_BACKUP_BACKEND = "openai_responses_api"
@@ -139,6 +140,12 @@ def load_repo_config() -> dict:
     return raw if isinstance(raw, dict) else {}
 
 
+def load_code_review_prompt_template() -> str:
+    if not CODE_REVIEW_PROMPT_PATH.exists():
+        raise RuntimeError(f"Prompt template not found: {CODE_REVIEW_PROMPT_PATH}")
+    return CODE_REVIEW_PROMPT_PATH.read_text().strip()
+
+
 def configured_model() -> str:
     env_model = os.getenv("OPENAI_MODEL")
     if env_model:
@@ -191,12 +198,24 @@ def backend_settings(backend: str) -> dict:
     return backend_config if isinstance(backend_config, dict) else {}
 
 
+def pre_commit_hook_enabled() -> bool:
+    if os.getenv("SKIP_CI_GATEKEEPER_PRE_COMMIT") == "1":
+        return False
+
+    config = load_repo_config()
+    hook_settings = config.get("git_hooks", {})
+    if not isinstance(hook_settings, dict):
+        return True
+
+    enabled = hook_settings.get("pre_commit_enabled")
+    if isinstance(enabled, bool):
+        return enabled
+
+    return True
+
+
 def configured_raw_artifact_name(backend: str) -> str:
     normalized_backend = normalize_backend_name(backend)
-    config = load_repo_config()
-    raw_artifact_name = config.get("raw_artifact_name")
-    if isinstance(raw_artifact_name, str) and raw_artifact_name.strip():
-        return raw_artifact_name.strip()
     if normalized_backend == "openai_responses_api":
         return "response.json"
     if normalized_backend == "codex":
@@ -219,6 +238,19 @@ def resolve_repo_relative_path(relative_path: str) -> Path:
 
 def markdown_fence(text: str, language: str = "") -> str:
     return f"```{language}\n{text}\n```"
+
+
+def build_code_review_prompt(
+    scenario_instructions: str,
+    context: str,
+    response_contract: str,
+) -> str:
+    template = load_code_review_prompt_template()
+    return template.format(
+        response_contract=response_contract,
+        scenario_instructions=scenario_instructions,
+        context=context,
+    )
 
 
 def extract_codex_exec_error(stdout: str) -> str | None:
@@ -338,22 +370,25 @@ def request_edit_plan_via_openai(prompt: str, context: str, model: str | None = 
     settings = backend_settings("openai_responses_api")
     endpoint = settings.get("endpoint", "https://api.openai.com/v1/responses")
     timeout_seconds = settings.get("timeout_seconds", 60)
+    response_contract = (
+        "Return only JSON matching this schema: "
+        '{"edits":[{"path":"relative/path.py","content":"full updated file contents"}]}. '
+        "Only include files that need to change."
+    )
+    review_prompt = build_code_review_prompt(
+        scenario_instructions=prompt,
+        context=context,
+        response_contract=response_contract,
+    )
 
     payload = {
         "model": resolved_model,
-        "instructions": (
-            "You are a senior engineer. "
-            "Return only JSON matching this schema: "
-            '{"edits":[{"path":"relative/path.py","content":"full updated file contents"}]}. '
-            "Only include files that need to change. "
-            "Do not include markdown fences or commentary."
-        ),
+        "instructions": "Return only strict JSON. Do not include markdown fences, prose, or commentary.",
         "input": [
             {
                 "role": "user",
                 "content": [
-                    {"type": "input_text", "text": prompt},
-                    {"type": "input_text", "text": context},
+                    {"type": "input_text", "text": review_prompt},
                 ],
             }
         ],
@@ -421,20 +456,13 @@ def request_edit_plan_via_codex(prompt: str, context: str, model: str | None = N
         "additionalProperties": False,
     }
 
-    codex_prompt = "\n\n".join(
-        [
-            "You are a strict senior engineer inside a CI gatekeeper worker.",
-            "Find the smallest invariant-preserving fix that makes the failing test pass.",
-            "Prefer repairing the real contract or write path over adding a workaround on the read path.",
-            "Do not change tests, do not add unrelated refactors, and do not widen the fix beyond the minimum files needed.",
-            "Think about what could break if you fix the wrong layer, and reject tempting band-aids that only hide the symptom.",
-            "Return only strict JSON matching the required schema.",
-            "Do not include markdown fences, prose, or commentary.",
-            "Do not apply changes directly to the repository.",
-            f"Scenario instructions: {prompt}",
-            "Repository context follows.",
-            context,
-        ]
+    codex_prompt = build_code_review_prompt(
+        scenario_instructions=prompt,
+        context=context,
+        response_contract=(
+            "Return only strict JSON matching the required schema. "
+            "Do not include markdown fences, prose, or commentary."
+        ),
     )
 
     with tempfile.TemporaryDirectory(prefix="codex-native-") as temp_dir:
@@ -841,6 +869,9 @@ def make_parser() -> argparse.ArgumentParser:
     add_scenario_arg(apply_parser)
     apply_parser.add_argument("patch_file", nargs="?", default=None, help="Patch file to apply.")
 
+    hook_parser = subparsers.add_parser("pre-commit-gate", help="Run the tracked local pre-commit gate.")
+    hook_parser.add_argument("--max-retries", type=int, default=1, help="Number of attempts before failing the hook.")
+
     run_parser = subparsers.add_parser("run", help="Run the end-to-end demo loop for a scenario.")
     add_scenario_arg(run_parser)
     add_backend_arg(run_parser)
@@ -932,6 +963,12 @@ def main() -> int:
         applied, output = apply_patch_text(patch_path.read_text(), patch_path)
         print(output or "Patch applied.")
         return 0 if applied else 1
+
+    if command == "pre-commit-gate":
+        if not pre_commit_hook_enabled():
+            print("Pre-commit gate is disabled.")
+            return 0
+        return run_all(max_retries=args.max_retries, backend="codex")
 
     if command == "run":
         return run_demo(

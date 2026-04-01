@@ -13,6 +13,12 @@ This repo supports two intended operating modes:
 
 In both modes, `ci_loop.py` is the gatekeeper that decides whether the generated patch is acceptable.
 
+## Core Principles
+
+- `zero-trust`: do not rely on engineers remembering to run a review sub-agent before pushing code. If the guard is optional, it will eventually be skipped.
+- `tooling-enforced local review`: the repo now includes a tracked Git pre-commit hook path that runs the local Codex backend before the commit completes.
+- `model council`: using a non-Anthropic-family reviewer against Anthropic-family generated code is a deliberate design choice to reduce inherent model bias and broaden what gets caught.
+
 ## Setup
 
 - The demo runner loads `OPENAI_API_KEY` from `.env` automatically for the backup route.
@@ -30,7 +36,7 @@ Backend precedence:
 1. `--backend`
 2. `CI_LOOP_BACKEND`
 3. `ci_config.json`
-4. built-in fallback: `openai_responses_api`
+4. built-in fallback: `codex`
 
 Model precedence:
 
@@ -54,6 +60,19 @@ Backend runtime requirements:
 
 - `codex`: requires a working authenticated Codex CLI session plus available Codex usage quota
 - `openai_responses_api`: requires `OPENAI_API_KEY` and network access
+
+Install the local Git hook:
+
+```bash
+./install_git_hooks.sh
+```
+
+That sets `core.hooksPath=.githooks` and enables the tracked pre-commit hook at `.githooks/pre-commit`.
+
+Hook control:
+
+- repo-level switch: `ci_config.json` -> `git_hooks.pre_commit_enabled`
+- one-off local bypass: `SKIP_CI_GATEKEEPER_PRE_COMMIT=1`
 
 ## Operating Modes
 
@@ -85,6 +104,18 @@ Recommended command:
 
 ```bash
 python3 ci_loop.py run-all --max-retries 1
+```
+
+Tracked hook:
+
+```bash
+.githooks/pre-commit
+```
+
+Shared review prompt:
+
+```bash
+code_review.prompt
 ```
 
 ### Remote CI mode: `openai_responses_api`

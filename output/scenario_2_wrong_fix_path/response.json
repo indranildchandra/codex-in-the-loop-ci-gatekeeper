@@ -1,23 +1,23 @@
 {
-  "id": "resp_0dc61bb71ebeb6c30069cab0e658a48197a7d127a57f6d5ede",
+  "id": "resp_0040310e3a908f9c0069cc9a78b26481909f1ad2323d4a833f",
   "object": "response",
-  "created_at": 1774891238,
+  "created_at": 1775016568,
   "status": "completed",
   "background": false,
   "billing": {
     "payer": "developer"
   },
-  "completed_at": 1774891239,
+  "completed_at": 1775016570,
   "error": null,
   "frequency_penalty": 0.0,
   "incomplete_details": null,
-  "instructions": "You are a senior engineer. Return only JSON matching this schema: {\"edits\":[{\"path\":\"relative/path.py\",\"content\":\"full updated file contents\"}]}. Only include files that need to change. Do not include markdown fences or commentary.",
+  "instructions": "Return only strict JSON. Do not include markdown fences, prose, or commentary.",
   "max_output_tokens": null,
   "max_tool_calls": null,
   "model": "gpt-4.1-2025-04-14",
   "output": [
     {
-      "id": "msg_0dc61bb71ebeb6c30069cab0e69958819781b1a4c5f6f951f8",
+      "id": "msg_0040310e3a908f9c0069cc9a7948ec8190923efd8c8ce80848",
       "type": "message",
       "status": "completed",
       "content": [
@@ -56,7 +56,7 @@
   "top_p": 1.0,
   "truncation": "disabled",
   "usage": {
-    "input_tokens": 350,
+    "input_tokens": 461,
     "input_tokens_details": {
       "cached_tokens": 0
     },
@@ -64,7 +64,7 @@
     "output_tokens_details": {
       "reasoning_tokens": 0
     },
-    "total_tokens": 479
+    "total_tokens": 590
   },
   "user": null,
   "metadata": {}

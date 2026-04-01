@@ -7,7 +7,11 @@ codex-in-the-loop-ci-gatekeeper/
 ├── PLAYBOOK.md
 ├── README.md
 ├── REPO_STRUCTURE.md
+├── code_review.prompt
+├── install_git_hooks.sh
 ├── apply_patch.sh
+├── .githooks/
+│   └── pre-commit
 ├── user_store.py
 ├── ci_config.json
 ├── ci_loop.py
@@ -32,6 +36,9 @@ codex-in-the-loop-ci-gatekeeper/
 
 - `ci_loop.py`: main CI gatekeeper loop, artifact generation, patch application, and validation
 - `ci_config.json`: repo-local default model configuration
+- `code_review.prompt`: shared repair-review prompt consumed by both backend paths
+- `install_git_hooks.sh`: helper that points Git at the tracked hook directory
+- `.githooks/pre-commit`: tracked Git hook that enforces the local Codex gate before commit
 - `user_store.py`: scenario 1 buggy baseline
 - `user_registry.py`: scenario 2 buggy baseline
 - `orders.py` and `pricing.py`: scenario 3 buggy baseline

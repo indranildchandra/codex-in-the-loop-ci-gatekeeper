@@ -11,6 +11,12 @@ This repo is designed around two operating modes:
 
 In both cases, [ci_loop.py](ci_loop.py) is the gatekeeper. It is the component that decides whether a generated patch is valid enough to count as a pass.
 
+## Core Principles
+
+- `zero-trust`: this is built as a workflow guard, not as an optional engineer habit. If review depends on someone remembering to trigger a sub-agent before push, it will eventually be skipped.
+- `automation over memory`: the repo now includes a real tracked pre-commit gate, so the local review path can be enforced by tooling instead of process discipline.
+- `model council`: a non-Anthropic-family reviewer checking Anthropic-family generated code is a deliberate choice to reduce same-model bias and improve output quality plus test coverage.
+
 ## Why This Repo Exists
 
 Most coding-agent demos stop at "the model wrote some code."
@@ -141,7 +147,7 @@ Backend resolution order is:
 1. `--backend` CLI flag
 2. `CI_LOOP_BACKEND` environment variable
 3. `ci_config.json`
-4. built-in fallback: `openai_responses_api`
+4. built-in fallback: `codex`
 
 Model resolution order is:
 
@@ -166,6 +172,31 @@ Backend-specific runtime requirements:
 
 - `codex` requires a working authenticated Codex CLI session and available Codex usage quota
 - `openai_responses_api` requires `OPENAI_API_KEY` plus network access
+
+Optional local viewer:
+
+```bash
+brew install glow
+```
+
+`glow` is not required to run the repo, but it makes `response.md` and `patch.diff` much easier to present in a terminal demo.
+
+## Install The Local Hook
+
+Install the tracked Git hook:
+
+```bash
+./install_git_hooks.sh
+```
+
+That configures `core.hooksPath=.githooks` and enables the local pre-commit gate in `.githooks/pre-commit`.
+
+Hook control options:
+
+- default: enabled through `ci_config.json` via `git_hooks.pre_commit_enabled`
+- temporary local bypass: run with `SKIP_CI_GATEKEEPER_PRE_COMMIT=1`
+
+That gives you a stable repo-level switch plus a one-off escape hatch for local testing.
 
 Important limit:
 
@@ -230,6 +261,17 @@ python3 ci_loop.py run-all --backend codex --max-retries 1
 
 With the default `codex` backend, `run` and `run-all` work without an `OPENAI_API_KEY` when the Codex CLI is available. The backup `openai_responses_api` route still requires a valid `OPENAI_API_KEY` in `.env` or the shell environment, plus network access to the OpenAI Responses API.
 
+## Shared Prompt
+
+The shared repair-review prompt lives in [code_review.prompt](code_review.prompt).
+
+Both backends use it:
+
+- `codex` uses it as the worker prompt passed to `codex exec`
+- `openai_responses_api` uses the same prompt body as the repair request sent through the Responses API
+
+That keeps the repair stance in one file instead of duplicating prompt logic across backends.
+
 ## Operating Intent
 
 ### Local `codex` backend
@@ -241,7 +283,7 @@ Use `codex` as the developer-side gate before code leaves the laptop. The intend
 3. Codex proposes a minimal patch and the loop validates it immediately.
 4. The developer only proceeds to commit if the generated repair path actually validates.
 
-This is the right backend for a pre-commit or pre-push style workflow because it keeps the loop close to the developer and produces a readable `response.md` artifact for local inspection.
+This is the right backend for a pre-commit or pre-push style workflow because it keeps the loop close to the developer, produces a readable `response.md` artifact for local inspection, and now has a tracked Git hook install path in this repo.
 
 ### Remote `openai_responses_api` backend
 
