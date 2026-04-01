@@ -204,7 +204,7 @@ The default backend is now `codex`, so the repo can run without any OpenAI API k
 
 ## Scenario Coverage
 
-All scenario files under `scenarios/` map to runnable demo flows:
+All scenario files under `demo_scenarios/` map to runnable demo flows:
 
 - `scenario_1_integration_bug`
   Write/read inconsistency in [user_store.py](user_store.py)

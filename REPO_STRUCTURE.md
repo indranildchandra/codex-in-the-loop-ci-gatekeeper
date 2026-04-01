@@ -22,7 +22,7 @@ codex-in-the-loop-ci-gatekeeper/
 ├── requirements.txt
 ├── run_codex.sh
 ├── output/
-├── scenarios/
+├── demo_scenarios/
 │   ├── scenario_1_integration_bug.md
 │   ├── scenario_2_wrong_fix_path.md
 │   └── scenario_3_refactor_bug.md
@@ -43,5 +43,5 @@ codex-in-the-loop-ci-gatekeeper/
 - `user_registry.py`: scenario 2 buggy baseline
 - `orders.py` and `pricing.py`: scenario 3 buggy baseline
 - `output/`: generated `context.txt`, backend raw artifacts such as `response.json` or `response.md`, and `patch.diff`
-- `scenarios/`: operator-facing scenario notes
+- `demo_scenarios/`: operator-facing demo scenario notes
 - `tests/`: scenario-specific validators used by the loop
