@@ -1,3 +1,103 @@
+# FAILURE_RECORD
+{
+  "failed_tests": [
+    "tests/test_scenario_3_refactor_bug.py"
+  ],
+  "failure_summary": "FAILED tests/test_scenario_3_refactor_bug.py::RefactorBugTests::test_order_total_with_percentage_tax",
+  "likely_modules": [
+    "tests/test_scenario_3_refactor_bug.py"
+  ],
+  "confidence": 0.85
+}
+
+# FAILURE_OUTPUT
+F                                                                        [100%]
+=================================== FAILURES ===================================
+____________ RefactorBugTests.test_order_total_with_percentage_tax _____________
+
+self = <test_scenario_3_refactor_bug.RefactorBugTests testMethod=test_order_total_with_percentage_tax>
+
+    def test_order_total_with_percentage_tax(self) -> None:
+        service = OrderService()
+    
+        order = service.create_order(100)
+    
+>       self.assertEqual(order["total"], 110)
+E       AssertionError: 100.1 != 110
+
+tests/test_scenario_3_refactor_bug.py:12: AssertionError
+=========================== short test summary info ============================
+FAILED tests/test_scenario_3_refactor_bug.py::RefactorBugTests::test_order_total_with_percentage_tax
+1 failed in 0.04s
+
+# SCENARIO_MATCH
+{
+  "matched": true,
+  "source": "test_scenarios",
+  "scenario_id": "refactor_contract_drift_bug",
+  "confidence": 0.9999999999999999,
+  "accepted_fix_patterns": [
+    "repair the caller to match the refactored contract",
+    "keep percentage-based semantics"
+  ],
+  "rejected_fix_patterns": [
+    "change pricing.py back to decimal tax input",
+    "modify tests"
+  ],
+  "invariants": [
+    "the pricing.calculate_total percentage-based tax contract must be preserved"
+  ]
+}
+
+# TEST_SCENARIO_RECORD
+{
+  "id": "refactor_contract_drift_bug",
+  "title": "Caller-callee contract drift after refactor",
+  "origin": "repo-seeded",
+  "failure_signatures": [
+    "100.1 != 110",
+    "percentage tax contract drift"
+  ],
+  "affected_tests": [
+    "tests/test_scenario_3_refactor_bug.py"
+  ],
+  "likely_code_areas": [
+    "orders.py",
+    "pricing.py"
+  ],
+  "invariants": [
+    "the pricing.calculate_total percentage-based tax contract must be preserved"
+  ],
+  "accepted_fix_patterns": [
+    "repair the caller to match the refactored contract",
+    "keep percentage-based semantics"
+  ],
+  "rejected_fix_patterns": [
+    "change pricing.py back to decimal tax input",
+    "modify tests"
+  ],
+  "review_required": true
+}
+
+# FILE: tests/test_scenario_3_refactor_bug.py
+import unittest
+
+from orders import OrderService
+
+
+class RefactorBugTests(unittest.TestCase):
+    def test_order_total_with_percentage_tax(self) -> None:
+        service = OrderService()
+
+        order = service.create_order(100)
+
+        self.assertEqual(order["total"], 110)
+
+
+if __name__ == "__main__":
+    unittest.main()
+
+
 # FILE: orders.py
 from pricing import calculate_total
 
@@ -18,22 +118,3 @@ class OrderService:
 def calculate_total(price, tax_rate):
     # Refactor: tax_rate now expected as percentage (10 instead of 0.1).
     return price + (price * (tax_rate / 100))
-
-
-# FILE: tests/test_scenario_3_refactor_bug.py
-import unittest
-
-from orders import OrderService
-
-
-class RefactorBugTests(unittest.TestCase):
-    def test_order_total_with_percentage_tax(self) -> None:
-        service = OrderService()
-
-        order = service.create_order(100)
-
-        self.assertEqual(order["total"], 110)
-
-
-if __name__ == "__main__":
-    unittest.main()

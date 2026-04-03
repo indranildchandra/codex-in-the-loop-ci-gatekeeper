@@ -1,0 +1,28 @@
+{
+  "id": "write_path_key_helper_bug",
+  "title": "Write-path key helper returns the wrong identifier",
+  "origin": "repo-seeded",
+  "failure_signatures": [
+    "canonical storage key missing",
+    "not found in {'TestUser@Example.com': 'Indranil'}"
+  ],
+  "affected_tests": [
+    "tests/test_scenario_2_wrong_fix_path.py"
+  ],
+  "likely_code_areas": [
+    "user_registry.py",
+    "utils.py"
+  ],
+  "invariants": [
+    "canonical storage key generation must happen on the write path"
+  ],
+  "accepted_fix_patterns": [
+    "repair the storage key helper",
+    "preserve normalized-read behavior"
+  ],
+  "rejected_fix_patterns": [
+    "patch get_user only",
+    "modify tests"
+  ],
+  "review_required": true
+}

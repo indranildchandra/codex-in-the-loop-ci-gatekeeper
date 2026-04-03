@@ -1,0 +1,12 @@
+{
+  "required": true,
+  "reason": "No existing test_scenarios record matched this failure with sufficient confidence.",
+  "confidence_band": "low",
+  "questions": [
+    "Is the current failing test asserting the intended contract, or should the contract change instead?",
+    "Should the fix preserve the current public API shape and behavior outside the failing scenario?",
+    "Which source file or contract should be treated as the most likely repair surface?"
+  ],
+  "candidate_scenario_id": null,
+  "candidate_confidence": null
+}

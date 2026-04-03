@@ -1,0 +1,9 @@
+--- delivery_window.py
++++ delivery_window.py
+@@ -2,5 +2,4 @@
+     """Return promised delivery days for the given distance."""
+     if distance_km <= 0:
+         return 0
+-    # BUG: this floors partial-day distances; the contract should round up.
+-    return distance_km // 500
++    return (distance_km + 499) // 500

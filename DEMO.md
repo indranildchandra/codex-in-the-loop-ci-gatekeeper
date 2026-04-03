@@ -8,7 +8,7 @@ This file is the single-screen walkthrough for the live demo.
 
 It only shows the broken baseline.
 
-`python3 ci_loop.py run-all --max-retries 1` is the actual gatekeeper loop for the default local path:
+`python3 ci_loop.py run-all --max-retries 2 --dryRun` is the actual gatekeeper loop for the default local path:
 
 1. build context
 2. call the model
@@ -20,6 +20,9 @@ It only shows the broken baseline.
 The point of the demo is not "the model wrote code."
 
 The point is "the loop decides whether the change is safe."
+
+By default, `run-all` executes only the gating scenarios (1 to 3).  
+Use `--include-non-gating` to include scenario 4, then choose clarification policy: fail-closed (default) or `interactive`.
 
 ## Two Operating Modes
 
@@ -77,24 +80,39 @@ Show the broken baseline:
 python3 ci_loop.py test --scenario scenario_1_integration_bug
 python3 ci_loop.py test --scenario scenario_2_wrong_fix_path
 python3 ci_loop.py test --scenario scenario_3_refactor_bug
+python3 ci_loop.py test --scenario scenario_4_low_confidence
 ```
 
 Run the full gatekeeper loop:
 
 ```bash
-python3 ci_loop.py run-all --max-retries 1
+python3 ci_loop.py run-all --max-retries 2 --dryRun
 ```
 
 Run the local Codex path explicitly:
 
 ```bash
-python3 ci_loop.py run-all --backend codex --max-retries 1
+python3 ci_loop.py run-all --backend codex --max-retries 2 --dryRun
 ```
 
 Run the remote CI path explicitly:
 
 ```bash
-python3 ci_loop.py run-all --backend openai_responses_api --max-retries 2
+python3 ci_loop.py run-all --backend openai_responses_api --max-retries 2 --dryRun
+```
+
+Show low-confidence artifact generation explicitly:
+
+```bash
+python3 ci_loop.py plan-clarification --scenario scenario_4_low_confidence
+cat output/scenario_4_low_confidence/clarification_request.json | jq .
+cat output/scenario_4_low_confidence/scenario_proposal.json | jq .
+```
+
+Run all 4 scenarios in one full interactive sweep:
+
+```bash
+python3 ci_loop.py run-all --include-non-gating --clarification-policy interactive --max-retries 2 --dryRun
 ```
 
 ## Manual Test Path
@@ -109,11 +127,12 @@ Use this sequence if you want to prove the flow step by step instead of running 
 python3 ci_loop.py test --scenario scenario_1_integration_bug
 python3 ci_loop.py test --scenario scenario_2_wrong_fix_path
 python3 ci_loop.py test --scenario scenario_3_refactor_bug
+python3 ci_loop.py test --scenario scenario_4_low_confidence
 ```
 
 Expected:
 
-- all three fail
+- all four fail
 - that confirms the repo is still in the intentionally broken demo state
 
 ### 2. Manually test the local `codex` backend
@@ -135,7 +154,7 @@ glow output/scenario_1_integration_bug/patch.diff || cat output/scenario_1_integ
 Run the full local backend:
 
 ```bash
-python3 ci_loop.py run-all --backend codex --max-retries 1
+python3 ci_loop.py run-all --backend codex --max-retries 2 --dryRun
 ```
 
 What to say:
@@ -163,7 +182,7 @@ glow output/scenario_1_integration_bug/patch.diff || cat output/scenario_1_integ
 Run the full remote backend:
 
 ```bash
-python3 ci_loop.py run-all --backend openai_responses_api --max-retries 2
+python3 ci_loop.py run-all --backend openai_responses_api --max-retries 2 --dryRun
 ```
 
 What to say:
@@ -186,7 +205,12 @@ For both backends, working means:
 - the baseline test fails before generation
 - the backend produces a patch for the correct target file
 - the scenario test passes after patch application
-- the repo is restored to the intentionally broken baseline after the accepted run
+- with `--dryRun`, the repo is restored to the intentionally broken baseline after the accepted run
+
+Default runtime behavior:
+
+- without `--dryRun`, accepted fixes remain in the working tree
+- with `--dryRun`, accepted fixes are reverted after validation
 
 ## Default Path
 
@@ -383,6 +407,89 @@ def create_order(self, price):
 
 This is not a syntax bug. It is a refactor contract bug. The right fix is not “make the old behavior work again.” The right fix is “repair the caller to match the new contract.”
 
+## Scenario 4: Low-Confidence Clarification Gate
+
+### Purpose
+
+- this scenario is intentionally *not* mapped in seeded `test_scenarios/`
+- it exists to demo the stop-and-review path
+- by default it is excluded from `run-all`, but it can be included via `--include-non-gating`
+
+### Bug
+
+- `delivery_window.py` floors partial delivery windows
+- for `501` km it returns `1`, but the expected contract is round-up to `2`
+
+### What `test` Shows
+
+- baseline test fails on scenario 4
+- this creates a failure signature that has no high-confidence registry match
+
+### What `plan-clarification` Shows
+
+```bash
+python3 ci_loop.py plan-clarification --scenario scenario_4_low_confidence
+cat output/scenario_4_low_confidence/clarification_request.json | jq .
+cat output/scenario_4_low_confidence/scenario_proposal.json | jq .
+```
+
+- `clarification_request.json` is generated to force operator review
+- `scenario_proposal.json` is drafted as a candidate recurring scenario record
+- the loop stops before backend generation for this path until intent is clarified
+
+### Full Interactive Run-All Demo
+
+Use this when you want to show the production-style operator flow in one command.
+
+```bash
+python3 ci_loop.py run-all --include-non-gating --clarification-policy interactive --max-retries 2 --dryRun
+```
+
+What happens live:
+
+- scenarios 1 to 3 execute and validate normally
+- scenario 4 pauses and asks clarification questions in terminal
+- scenario 4 presents recommended answer options (`1/2/3`) per question and still allows free-text answers
+- operator can type `edit`/`e` to do another Q&A pass before proceeding
+- operator can type `yes`/`y` to continue after answering
+- the interactive clarification trace is captured in `clarification_dialog.json`
+- the loop proceeds to patch generation and validation for scenario 4
+
+Inspect captured interactive answers:
+
+```bash
+cat output/scenario_4_low_confidence/clarification_dialog.json | jq .
+```
+
+### Forced Heuristics Fallback Demo
+
+To demonstrate the fallback logic deterministically, force heuristic option generation in interactive mode:
+
+```bash
+python3 ci_loop.py run --scenario scenario_4_low_confidence --clarification-policy interactive --clarifier-option-source heuristic --max-retries 1 --dryRun
+cat output/scenario_4_low_confidence/clarification_dialog.json | jq .
+```
+
+What to call out:
+
+- question flow is still interactive and supports `edit`/`e` loops
+- options are generated from heuristic rules (not backend clarifier responses)
+- `clarification_dialog.json` shows `dialog_backend: "heuristic"` and per-question `option_source: "heuristic"`
+- `response_thread_ids` is empty because backend clarifier calls are intentionally bypassed
+
+### Fail-Closed Run-All Demo
+
+Use this to show the default policy.
+
+```bash
+python3 ci_loop.py run-all --include-non-gating --max-retries 2 --dryRun
+```
+
+What happens live:
+
+- scenarios 1 to 3 execute and validate normally
+- scenario 4 writes clarification artifacts and exits fail-closed
+
 ## What The Artifacts Mean
 
 - `context.txt`: what the model saw
@@ -394,6 +501,7 @@ This is not a syntax bug. It is a refactor contract bug. The right fix is not �
 - Scenario 1: write path and read path disagree, so the correct fix is normalize on write
 - Scenario 2: the helper that generates storage keys is wrong, so the correct fix is repair the write-path helper, not the read path
 - Scenario 3: a refactor changed a contract, so the correct fix is update the caller, not roll back the callee
+- Scenario 4: when failure classification is low confidence, the loop should stop and ask for clarification before generating a patch
 
 ## Overall Summary
 

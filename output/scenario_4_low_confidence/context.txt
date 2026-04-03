@@ -1,0 +1,104 @@
+# FAILURE_RECORD
+{
+  "failed_tests": [
+    "tests/test_scenario_4_low_confidence.py"
+  ],
+  "failure_summary": "FAILED tests/test_scenario_4_low_confidence.py::LowConfidenceScenarioTests::test_promised_days_rounds_up_partial_window",
+  "likely_modules": [
+    "tests/test_scenario_4_low_confidence.py"
+  ],
+  "confidence": 0.85
+}
+
+# FAILURE_OUTPUT
+F                                                                        [100%]
+=================================== FAILURES ===================================
+____ LowConfidenceScenarioTests.test_promised_days_rounds_up_partial_window ____
+
+self = <test_scenario_4_low_confidence.LowConfidenceScenarioTests testMethod=test_promised_days_rounds_up_partial_window>
+
+    def test_promised_days_rounds_up_partial_window(self):
+>       self.assertEqual(promised_days(501), 2)
+E       AssertionError: 1 != 2
+
+tests/test_scenario_4_low_confidence.py:8: AssertionError
+=========================== short test summary info ============================
+FAILED tests/test_scenario_4_low_confidence.py::LowConfidenceScenarioTests::test_promised_days_rounds_up_partial_window
+1 failed in 0.03s
+
+# RECENT_REPO_DELTA
+{
+  "source": "working_tree",
+  "changed_files": [
+    "tests/test_scenario_4_low_confidence.py",
+    "delivery_window.py"
+  ]
+}
+
+# RECENT_REPO_DELTA_DIFF
+diff --git a/delivery_window.py b/delivery_window.py
+new file mode 100644
+index 0000000..b4e99aa
+--- /dev/null
++++ b/delivery_window.py
+@@ -0,0 +1,6 @@
++def promised_days(distance_km: int) -> int:
++    """Return promised delivery days for the given distance."""
++    if distance_km <= 0:
++        return 0
++    # BUG: this floors partial-day distances; the contract should round up.
++    return distance_km // 500
+diff --git a/tests/test_scenario_4_low_confidence.py b/tests/test_scenario_4_low_confidence.py
+new file mode 100644
+index 0000000..21182ed
+--- /dev/null
++++ b/tests/test_scenario_4_low_confidence.py
+@@ -0,0 +1,12 @@
++import unittest
++
++from delivery_window import promised_days
++
++
++class LowConfidenceScenarioTests(unittest.TestCase):
++    def test_promised_days_rounds_up_partial_window(self):
++        self.assertEqual(promised_days(501), 2)
++
++
++if __name__ == "__main__":
++    unittest.main()
+
+# CLARIFICATION_REQUEST
+{
+  "required": true,
+  "reason": "No existing test_scenarios record matched this failure with sufficient confidence.",
+  "confidence_band": "low",
+  "questions": [
+    "Is the current failing test asserting the intended contract, or should the contract change instead?",
+    "Should the fix preserve the current public API shape and behavior outside the failing scenario?",
+    "Which source file or contract should be treated as the most likely repair surface?"
+  ],
+  "candidate_scenario_id": null
+}
+
+# FILE: tests/test_scenario_4_low_confidence.py
+import unittest
+
+from delivery_window import promised_days
+
+
+class LowConfidenceScenarioTests(unittest.TestCase):
+    def test_promised_days_rounds_up_partial_window(self):
+        self.assertEqual(promised_days(501), 2)
+
+
+if __name__ == "__main__":
+    unittest.main()
+
+
+# FILE: delivery_window.py
+def promised_days(distance_km: int) -> int:
+    """Return promised delivery days for the given distance."""
+    if distance_km <= 0:
+        return 0
+    # BUG: this floors partial-day distances; the contract should round up.
+    return distance_km // 500

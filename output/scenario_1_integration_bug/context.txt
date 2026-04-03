@@ -1,3 +1,107 @@
+# FAILURE_RECORD
+{
+  "failed_tests": [
+    "tests/test_scenario_1_integration_bug.py"
+  ],
+  "failure_summary": "FAILED tests/test_scenario_1_integration_bug.py::IntegrationBugTests::test_email_lookup_case_insensitive",
+  "likely_modules": [
+    "tests/test_scenario_1_integration_bug.py"
+  ],
+  "confidence": 0.85
+}
+
+# FAILURE_OUTPUT
+F                                                                        [100%]
+=================================== FAILURES ===================================
+____________ IntegrationBugTests.test_email_lookup_case_insensitive ____________
+
+self = <test_scenario_1_integration_bug.IntegrationBugTests testMethod=test_email_lookup_case_insensitive>
+
+    def test_email_lookup_case_insensitive(self) -> None:
+        store = UserStore()
+    
+        store.add_user("TestUser@Example.com", "Indranil")
+    
+        result = store.get_user("testuser@example.com")
+    
+>       self.assertEqual(result, "Indranil")
+E       AssertionError: None != 'Indranil'
+
+tests/test_scenario_1_integration_bug.py:14: AssertionError
+=========================== short test summary info ============================
+FAILED tests/test_scenario_1_integration_bug.py::IntegrationBugTests::test_email_lookup_case_insensitive
+1 failed in 0.06s
+
+# SCENARIO_MATCH
+{
+  "matched": true,
+  "source": "test_scenarios",
+  "scenario_id": "write_path_canonicalization_bug",
+  "confidence": 0.9999999999999999,
+  "accepted_fix_patterns": [
+    "repair canonicalization on write",
+    "preserve read-path lookup semantics"
+  ],
+  "rejected_fix_patterns": [
+    "read-path-only workaround",
+    "modify tests"
+  ],
+  "invariants": [
+    "write-path and read-path key normalization must match"
+  ]
+}
+
+# TEST_SCENARIO_RECORD
+{
+  "id": "write_path_canonicalization_bug",
+  "title": "Write-path canonicalization mismatch",
+  "origin": "repo-seeded",
+  "failure_signatures": [
+    "None != 'Indranil'",
+    "case-insensitive lookup fails after insert"
+  ],
+  "affected_tests": [
+    "tests/test_scenario_1_integration_bug.py"
+  ],
+  "likely_code_areas": [
+    "user_store.py",
+    "utils.py"
+  ],
+  "invariants": [
+    "write-path and read-path key normalization must match"
+  ],
+  "accepted_fix_patterns": [
+    "repair canonicalization on write",
+    "preserve read-path lookup semantics"
+  ],
+  "rejected_fix_patterns": [
+    "read-path-only workaround",
+    "modify tests"
+  ],
+  "review_required": true
+}
+
+# FILE: tests/test_scenario_1_integration_bug.py
+import unittest
+
+from user_store import UserStore
+
+
+class IntegrationBugTests(unittest.TestCase):
+    def test_email_lookup_case_insensitive(self) -> None:
+        store = UserStore()
+
+        store.add_user("TestUser@Example.com", "Indranil")
+
+        result = store.get_user("testuser@example.com")
+
+        self.assertEqual(result, "Indranil")
+
+
+if __name__ == "__main__":
+    unittest.main()
+
+
 # FILE: user_store.py
 from utils import normalize_email
 
@@ -20,23 +124,3 @@ def normalize_email(email: str) -> str:
     if not email:
         return ""
     return email.strip().lower()
-
-# FILE: tests/test_scenario_1_integration_bug.py
-import unittest
-
-from user_store import UserStore
-
-
-class IntegrationBugTests(unittest.TestCase):
-    def test_email_lookup_case_insensitive(self) -> None:
-        store = UserStore()
-
-        store.add_user("TestUser@Example.com", "Indranil")
-
-        result = store.get_user("testuser@example.com")
-
-        self.assertEqual(result, "Indranil")
-
-
-if __name__ == "__main__":
-    unittest.main()

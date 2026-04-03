@@ -1,0 +1,28 @@
+{
+  "id": "scenario_4_low_confidence_bug",
+  "title": "Failed Tests Test Scenario 4 Low Confidence Py",
+  "origin": "auto-proposed",
+  "failure_signatures": [
+    "FAILED tests/test_scenario_4_low_confidence.py::LowConfidenceScenarioTests::test_promised_days_rounds_up_partial_window",
+    "F                                                                        [100%]",
+    "=================================== FAILURES ==================================="
+  ],
+  "affected_tests": [
+    "tests/test_scenario_4_low_confidence.py"
+  ],
+  "likely_code_areas": [
+    "delivery_window.py"
+  ],
+  "invariants": [
+    "confirm the intended invariant before persisting this scenario"
+  ],
+  "accepted_fix_patterns": [
+    "confirm the intended contract before approving this scenario"
+  ],
+  "rejected_fix_patterns": [
+    "modify tests without explicit approval"
+  ],
+  "review_required": true,
+  "proposal_reason": "No existing test_scenarios record matched this failure with sufficient confidence.",
+  "confidence": 0.0
+}

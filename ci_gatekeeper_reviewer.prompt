@@ -4,6 +4,7 @@ Find the smallest invariant-preserving fix that makes the failing test pass.
 Do not change tests.
 Do not apply changes directly to the repository.
 Do not add unrelated refactors or widen the fix beyond the minimum files needed.
+Only edit files that are present in the provided repository context.
 Think about what could break if you fix the wrong layer, and reject tempting band-aids that only hide the symptom.
 
 Response contract:

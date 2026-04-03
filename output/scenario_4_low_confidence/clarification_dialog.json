@@ -1,0 +1,69 @@
+{
+  "question_count": 3,
+  "answers": [
+    {
+      "question": "Is the current failing test asserting the intended contract, or should the contract change instead?",
+      "answer": "Keep the current failing test contract as intended behavior. (Recommended)"
+    },
+    {
+      "question": "Should the fix preserve the current public API shape and behavior outside the failing scenario?",
+      "answer": "Preserve public API shape and behavior outside this failure. (Recommended)"
+    },
+    {
+      "question": "Which source file or contract should be treated as the most likely repair surface?",
+      "answer": "Use delivery_window.py as the primary repair surface. (Recommended)"
+    }
+  ],
+  "dialog_backend": "heuristic",
+  "response_thread_ids": [],
+  "rounds": [
+    {
+      "round": 1,
+      "questions": [
+        {
+          "question": "Is the current failing test asserting the intended contract, or should the contract change instead?",
+          "options": [
+            "Keep the current failing test contract as intended behavior. (Recommended)",
+            "Treat the contract as changed and stop for explicit test update approval.",
+            "Unsure about intended contract; stop and escalate to the owner."
+          ],
+          "option_source": "heuristic",
+          "selected_input": "1",
+          "resolved_answer": "Keep the current failing test contract as intended behavior. (Recommended)",
+          "backend_payload": null,
+          "backend_trace_id": null,
+          "previous_response_id_input": null
+        },
+        {
+          "question": "Should the fix preserve the current public API shape and behavior outside the failing scenario?",
+          "options": [
+            "Preserve public API shape and behavior outside this failure. (Recommended)",
+            "Allow API contract changes and stop for explicit approval.",
+            "Unsure about API constraints; stop and escalate to the owner."
+          ],
+          "option_source": "heuristic",
+          "selected_input": "1",
+          "resolved_answer": "Preserve public API shape and behavior outside this failure. (Recommended)",
+          "backend_payload": null,
+          "backend_trace_id": null,
+          "previous_response_id_input": null
+        },
+        {
+          "question": "Which source file or contract should be treated as the most likely repair surface?",
+          "options": [
+            "Use delivery_window.py as the primary repair surface. (Recommended)",
+            "Use the failing test target as repair surface and stop for approval before changing tests.",
+            "Unsure about repair surface; stop and escalate to the owner."
+          ],
+          "option_source": "heuristic",
+          "selected_input": "1",
+          "resolved_answer": "Use delivery_window.py as the primary repair surface. (Recommended)",
+          "backend_payload": null,
+          "backend_trace_id": null,
+          "previous_response_id_input": null
+        }
+      ],
+      "decision": "y"
+    }
+  ]
+}

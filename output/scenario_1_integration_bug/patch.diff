@@ -1,12 +1,13 @@
 --- user_store.py
 +++ user_store.py
-@@ -6,8 +6,7 @@
+@@ -6,8 +6,8 @@
          self.users = {}
  
      def add_user(self, email: str, name: str):
 -        # BUG: inconsistent normalization (write path broken)
 -        self.users[email] = name
-+        self.users[normalize_email(email)] = name
++        key = normalize_email(email)
++        self.users[key] = name
  
      def get_user(self, email: str):
          key = normalize_email(email)

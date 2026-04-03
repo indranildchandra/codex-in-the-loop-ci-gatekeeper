@@ -2,7 +2,7 @@
 
 This repo is intentionally small. The point is not scale. The point is control.
 
-Each scenario starts with a failing system behavior. The loop builds context, asks the model for a change, renders a patch, validates it, and either accepts or rejects it.
+Each scenario starts with a failing system behavior. The loop builds failure-driven context, asks the model for a change, renders a patch, validates it, and either accepts or rejects it.
 
 The repository is intentionally kept in a buggy baseline state for the demo. The CI loop is supposed to fix those bugs and rerun the tests to confirm whether the fix actually worked.
 
@@ -12,6 +12,17 @@ This repo supports two intended operating modes:
 - `openai_responses_api` is the backup remote CI path, where Jenkins or a similar system runs the loop after commits on UAT or prod-tagged branches
 
 In both modes, `ci_loop.py` is the gatekeeper that decides whether the generated patch is acceptable.
+
+## Explicit Assumption
+
+This gate is failure-driven and depends on pre-existing tests.
+
+- The intended deployment target is a repo that already follows a test-first discipline for important behaviors.
+- Functional/integration scenario tests are the primary acceptance signal for this workflow.
+- Unit tests are additive but generally not sufficient as the only gate signal for production-like confidence.
+- If no relevant tests exist, the loop can still propose patches, but the accept/reject decision becomes materially less reliable.
+- This workflow is not a generic code-review system. It is a code-fix loop for buggy implementations identified by failing pre-defined tests.
+- In repos where tests are not defined before implementation, this loop is significantly less useful.
 
 ## Core Principles
 
@@ -74,6 +85,40 @@ Hook control:
 - repo-level switch: `ci_config.json` -> `git_hooks.pre_commit_enabled`
 - one-off local bypass: `SKIP_CI_GATEKEEPER_PRE_COMMIT=1`
 
+## Operational Phases
+
+The runtime now implements five explicit phases.
+
+### Phase 1: Failure Intake
+
+- run the failing scenario test
+- normalize the failure into a structured record
+- build `context.txt` from observed failure instead of demo notes
+
+### Phase 2: Repo Delta Enrichment
+
+- inspect recent changed Python files from git
+- keep only delta that overlaps the current failure context
+- add bounded repo-delta sections to `context.txt`
+
+### Phase 3: Scenario Registry Lookup
+
+- load `test_scenarios/`
+- auto-attach high-confidence records
+- attach medium-confidence candidates cautiously instead of treating them as facts
+
+### Phase 4: Clarification Gate
+
+- if no record matches confidently enough, stop before backend generation
+- write `clarification_request.json`
+- require operator review before proceeding with a low-confidence repair
+
+### Phase 5: Reviewable Scenario Write-Back
+
+- auto-draft `scenario_proposal.json` when the failure is new or only partially classified
+- persist nothing automatically
+- write to `test_scenarios/` only through explicit approval
+
 ## Operating Modes
 
 ### Local development mode: `codex`
@@ -103,7 +148,7 @@ accept or reject before commit
 Recommended command:
 
 ```bash
-python3 ci_loop.py run-all --max-retries 1
+python3 ci_loop.py run-all --max-retries 2
 ```
 
 Tracked hook:
@@ -115,7 +160,13 @@ Tracked hook:
 Shared review prompt:
 
 ```bash
-code_review.prompt
+ci_gatekeeper_reviewer.prompt
+```
+
+Shared clarification Q&A prompt:
+
+```bash
+ci_gatekeeper_clarifier.prompt
 ```
 
 ### Remote CI mode: `openai_responses_api`
@@ -159,6 +210,7 @@ Current scenarios:
 - `scenario_1_integration_bug`
 - `scenario_2_wrong_fix_path`
 - `scenario_3_refactor_bug`
+- `scenario_4_low_confidence` (clarification/proposal artifact demo; excluded from `run-all`)
 
 ## Baseline Validation
 
@@ -168,6 +220,7 @@ Run each scenario directly:
 python3 ci_loop.py test --scenario scenario_1_integration_bug
 python3 ci_loop.py test --scenario scenario_2_wrong_fix_path
 python3 ci_loop.py test --scenario scenario_3_refactor_bug
+python3 ci_loop.py test --scenario scenario_4_low_confidence
 ```
 
 Expected results:
@@ -183,53 +236,73 @@ Those failures are expected. Do not "clean up" the repo before the demo; the bro
 Run one scenario end-to-end:
 
 ```bash
-python3 ci_loop.py run --scenario scenario_1_integration_bug
+python3 ci_loop.py run --scenario scenario_1_integration_bug --dryRun
 ```
 
 Run the full scenario sweep:
 
 ```bash
-python3 ci_loop.py run-all --max-retries 1
+python3 ci_loop.py run-all --max-retries 2 --dryRun
 ```
+
+`run-all` executes only gating scenarios (`scenario_1` to `scenario_3`). `scenario_4_low_confidence` is intentionally excluded so the commit gate remains deterministic while still allowing explicit low-confidence workflow demos.
 
 Run the local developer path explicitly:
 
 ```bash
-python3 ci_loop.py run-all --backend codex --max-retries 1
+python3 ci_loop.py run-all --backend codex --max-retries 2 --dryRun
 ```
 
 Run the remote CI path explicitly:
 
 ```bash
-python3 ci_loop.py run-all --backend openai_responses_api --max-retries 2
+python3 ci_loop.py run-all --backend openai_responses_api --max-retries 2 --dryRun
 ```
 
 What happens:
 
-1. scenario-specific context is built
+1. scenario-specific failure-driven context is built from the failing test, failure output, local code dependencies, recent repo delta when relevant, and matched or candidate `test_scenarios/` knowledge based on confidence
 2. the configured backend is called with that context and prompt
 3. the backend writes a raw artifact such as `response.json` or `response.md`
 4. `patch.diff` is rendered locally from the backend output
 5. the patch is applied with `patch`
 6. only the selected scenario test target is validated
-7. the change is accepted or the files are restored
+7. the change is accepted (or restored when `--dryRun` is set)
+
+Low-confidence exception:
+
+- if clarification is required, the loop stops before step 2
+- it writes `clarification_request.json`
+- it can also draft `scenario_proposal.json`
+- in `--clarification-policy interactive`, the operator interaction is captured in `clarification_dialog.json` and resolved answers are injected as runtime context before generation. This works in a real terminal and with piped stdin for scripted demos.
+- interactive confirmation supports `yes`/`y` to continue and `edit`/`e` to revise answers.
+- runtime logs are concise and do not print the full clarifier prompt template.
+- in interactive mode, `--clarifier-option-source backend|heuristic` controls whether options are generated by backend clarifiers or deterministic heuristics
+- the operator decides whether to clarify intent or approve a new recurring scenario record
 
 Verified current behavior:
 
 - scenario 1 produces a patch for `user_store.py`
 - scenario 2 produces a patch for `user_registry.py`
 - scenario 3 produces a patch for `orders.py`
-- after each accepted run, the repo is restored to the intentionally failing baseline
+- scenario 4 writes both `clarification_request.json` and `scenario_proposal.json` via `plan-clarification`
+- with `--dryRun`, accepted runs restore the intentionally failing baseline
+- without `--dryRun`, accepted runs remain in the working tree
 - the full sweep passes on both `codex` and `openai_responses_api`
+- structured recurring scenario knowledge comes from `test_scenarios/`, not `demo_scenarios/`
 
 ## Artifact Guide
 
 Each scenario produces stable input/output artifacts under `output/<scenario>/`:
 
-- `context.txt`: the repo snapshot and test context sent to the model
+- `context.txt`: the normalized failure record, raw failure output, dynamically discovered local code context, bounded recent repo delta when relevant, matched or candidate `test_scenarios/` knowledge when confidence warrants it, optional clarification metadata when the run is blocked, and static scenario fallback files sent to the model
 - `response.json`: the raw Responses API payload returned by OpenAI for the `openai_responses_api` backend
 - `response.md`: the raw backend log for the `codex` backend
 - `patch.diff`: the reviewable unified diff rendered locally from backend output
+- `clarification_request.json`: the confidence-gated question set emitted when the loop should stop before generation
+- `scenario_proposal.json`: an auto-drafted recurring scenario record that still requires explicit approval
+- `clarification_dialog.json`: full interactive trace including suggested options, selected inputs, answer revisions, backend source, and any response-thread ids
+  For `openai_responses_api`, the clarifier path threads `previous_response_id` across question turns to preserve conversation context.
 
 How to use them:
 
@@ -245,6 +318,7 @@ Artifacts are persisted under scenario-specific output directories:
 - `output/scenario_1_integration_bug/`
 - `output/scenario_2_wrong_fix_path/`
 - `output/scenario_3_refactor_bug/`
+- `output/scenario_4_low_confidence/`
 
 These output artifacts are meant to be commit-safe fallback material for live demos, so you can still show the flow if connectivity fails.
 
@@ -252,6 +326,34 @@ Build context only:
 
 ```bash
 python3 ci_loop.py build-context --scenario scenario_2_wrong_fix_path
+```
+
+Generate clarification and proposal artifacts only:
+
+```bash
+python3 ci_loop.py plan-clarification --scenario scenario_4_low_confidence
+cat output/scenario_4_low_confidence/clarification_request.json | jq .
+cat output/scenario_4_low_confidence/scenario_proposal.json | jq .
+```
+
+Interactive clarification demo:
+
+```bash
+python3 ci_loop.py run --scenario scenario_4_low_confidence --clarification-policy interactive --max-retries 1 --dryRun
+cat output/scenario_4_low_confidence/clarification_dialog.json | jq .
+```
+
+Forced heuristic fallback demo:
+
+```bash
+python3 ci_loop.py run --scenario scenario_4_low_confidence --clarification-policy interactive --clarifier-option-source heuristic --max-retries 1 --dryRun
+cat output/scenario_4_low_confidence/clarification_dialog.json | jq .
+```
+
+Approve a reviewed proposal into `test_scenarios/`:
+
+```bash
+python3 ci_loop.py approve-scenario-proposal --scenario scenario_2_wrong_fix_path
 ```
 
 Generate a patch without applying it:

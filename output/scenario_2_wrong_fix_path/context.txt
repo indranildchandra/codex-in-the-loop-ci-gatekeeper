@@ -1,3 +1,105 @@
+# FAILURE_RECORD
+{
+  "failed_tests": [
+    "tests/test_scenario_2_wrong_fix_path.py"
+  ],
+  "failure_summary": "FAILED tests/test_scenario_2_wrong_fix_path.py::WrongFixPathTests::test_registry_uses_canonical_storage_key",
+  "likely_modules": [
+    "tests/test_scenario_2_wrong_fix_path.py"
+  ],
+  "confidence": 0.85
+}
+
+# FAILURE_OUTPUT
+F                                                                        [100%]
+=================================== FAILURES ===================================
+__________ WrongFixPathTests.test_registry_uses_canonical_storage_key __________
+
+self = <test_scenario_2_wrong_fix_path.WrongFixPathTests testMethod=test_registry_uses_canonical_storage_key>
+
+    def test_registry_uses_canonical_storage_key(self) -> None:
+        store = UserRegistry()
+    
+        store.add_user("TestUser@Example.com", "Indranil")
+    
+>       self.assertIn("testuser@example.com", store.users)
+E       AssertionError: 'testuser@example.com' not found in {'TestUser@Example.com': 'Indranil'}
+
+tests/test_scenario_2_wrong_fix_path.py:12: AssertionError
+=========================== short test summary info ============================
+FAILED tests/test_scenario_2_wrong_fix_path.py::WrongFixPathTests::test_registry_uses_canonical_storage_key
+1 failed in 0.02s
+
+# SCENARIO_MATCH
+{
+  "matched": true,
+  "source": "test_scenarios",
+  "scenario_id": "write_path_key_helper_bug",
+  "confidence": 0.9999999999999999,
+  "accepted_fix_patterns": [
+    "repair the storage key helper",
+    "preserve normalized-read behavior"
+  ],
+  "rejected_fix_patterns": [
+    "patch get_user only",
+    "modify tests"
+  ],
+  "invariants": [
+    "canonical storage key generation must happen on the write path"
+  ]
+}
+
+# TEST_SCENARIO_RECORD
+{
+  "id": "write_path_key_helper_bug",
+  "title": "Write-path key helper returns the wrong identifier",
+  "origin": "repo-seeded",
+  "failure_signatures": [
+    "canonical storage key missing",
+    "not found in {'TestUser@Example.com': 'Indranil'}"
+  ],
+  "affected_tests": [
+    "tests/test_scenario_2_wrong_fix_path.py"
+  ],
+  "likely_code_areas": [
+    "user_registry.py",
+    "utils.py"
+  ],
+  "invariants": [
+    "canonical storage key generation must happen on the write path"
+  ],
+  "accepted_fix_patterns": [
+    "repair the storage key helper",
+    "preserve normalized-read behavior"
+  ],
+  "rejected_fix_patterns": [
+    "patch get_user only",
+    "modify tests"
+  ],
+  "review_required": true
+}
+
+# FILE: tests/test_scenario_2_wrong_fix_path.py
+import unittest
+
+from user_registry import UserRegistry
+
+
+class WrongFixPathTests(unittest.TestCase):
+    def test_registry_uses_canonical_storage_key(self) -> None:
+        store = UserRegistry()
+
+        store.add_user("TestUser@Example.com", "Indranil")
+
+        self.assertIn("testuser@example.com", store.users)
+        self.assertNotIn("TestUser@Example.com", store.users)
+        self.assertEqual(store.get_user("testuser@example.com"), "Indranil")
+
+
+if __name__ == "__main__":
+    unittest.main()
+
+
 # FILE: user_registry.py
 from utils import normalize_email
 
@@ -24,23 +126,3 @@ def normalize_email(email: str) -> str:
     if not email:
         return ""
     return email.strip().lower()
-
-# FILE: tests/test_scenario_2_wrong_fix_path.py
-import unittest
-
-from user_registry import UserRegistry
-
-
-class WrongFixPathTests(unittest.TestCase):
-    def test_registry_uses_canonical_storage_key(self) -> None:
-        store = UserRegistry()
-
-        store.add_user("TestUser@Example.com", "Indranil")
-
-        self.assertIn("testuser@example.com", store.users)
-        self.assertNotIn("TestUser@Example.com", store.users)
-        self.assertEqual(store.get_user("testuser@example.com"), "Indranil")
-
-
-if __name__ == "__main__":
-    unittest.main()

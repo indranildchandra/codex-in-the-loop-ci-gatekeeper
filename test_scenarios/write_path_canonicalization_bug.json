@@ -1,0 +1,28 @@
+{
+  "id": "write_path_canonicalization_bug",
+  "title": "Write-path canonicalization mismatch",
+  "origin": "repo-seeded",
+  "failure_signatures": [
+    "None != 'Indranil'",
+    "case-insensitive lookup fails after insert"
+  ],
+  "affected_tests": [
+    "tests/test_scenario_1_integration_bug.py"
+  ],
+  "likely_code_areas": [
+    "user_store.py",
+    "utils.py"
+  ],
+  "invariants": [
+    "write-path and read-path key normalization must match"
+  ],
+  "accepted_fix_patterns": [
+    "repair canonicalization on write",
+    "preserve read-path lookup semantics"
+  ],
+  "rejected_fix_patterns": [
+    "read-path-only workaround",
+    "modify tests"
+  ],
+  "review_required": true
+}

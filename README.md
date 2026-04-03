@@ -2,7 +2,7 @@
 
 This repository shows how to put a coding model inside a controlled CI loop instead of treating generation as the end of the workflow.
 
-The codebase is intentionally left in a buggy baseline state. That is part of the demo. The job of the CI loop is to inspect the broken state, build a constrained context snapshot, call the configured backend for a candidate change, render a patch, rerun validation, and decide whether the change should be accepted.
+The codebase is intentionally left in a buggy baseline state. That is part of the demo. The job of the CI loop is to inspect the broken state, build a constrained failure-driven context snapshot, call the configured backend for a candidate change, render a patch, rerun validation, and decide whether the change should be accepted.
 
 This repo is designed around two operating modes:
 
@@ -10,6 +10,17 @@ This repo is designed around two operating modes:
 - `openai_responses_api` is the backup remote CI path, where Jenkins or another pipeline triggers the loop after a commit lands on a UAT or prod-tagged branch
 
 In both cases, [ci_loop.py](ci_loop.py) is the gatekeeper. It is the component that decides whether a generated patch is valid enough to count as a pass.
+
+## Explicit Assumption
+
+This workflow is currently failure-driven and test-first.
+
+- It assumes the target repository already has meaningful executable tests for the behavior you care about.
+- In practice, that means functional/integration scenario tests are the primary signal for acceptance or rejection.
+- Unit tests are useful supporting coverage, but unit-only coverage is usually not enough for this gate to reflect real system behavior.
+- If no relevant tests exist, the loop can still generate patches, but acceptance quality and confidence drop because the validation signal is weak.
+- This workflow is not designed as a general code-review agent. It is a code-fix gate for buggy implementations detected by failing pre-defined tests.
+- For repositories that do not define tests before implementation, this workflow has limited practical value.
 
 ## Core Principles
 
@@ -123,7 +134,7 @@ Mark CI build success or failure
 
 In this repository, backend selection is configurable. The shared loop is:
 
-- `ci_loop.py` builds `context.txt`
+- `ci_loop.py` builds `context.txt` from the failing test run, the observed failure output, dynamically discovered local code dependencies, recent repo delta when that signal is relevant, and matched or candidate `test_scenarios/` knowledge depending on confidence
 - `ci_loop.py` dispatches the scenario attempt through the configured backend
 - the backend writes a raw artifact such as `response.json` or `response.md`
 - the repo renders those edits into `patch.diff`
@@ -212,6 +223,49 @@ All scenario files under `demo_scenarios/` map to runnable demo flows:
   Tempting local fix vs systemic fix in [user_registry.py](user_registry.py)
 - `scenario_3_refactor_bug`
   Contract drift between [orders.py](orders.py) and [pricing.py](pricing.py)
+- `scenario_4_low_confidence`
+  Deliberately unmapped failure to demonstrate clarification/proposal artifact generation using [delivery_window.py](delivery_window.py)
+
+Machine-usable recurring scenario knowledge now lives separately under `test_scenarios/`. That registry is used for automated matching and prompt enrichment; `demo_scenarios/` remains human-facing demo documentation only.
+The old `scenarios/` folder is removed and no longer used.
+
+## Failure-Driven Phases
+
+The runtime now implements five phases.
+
+### Phase 1: Failure Intake
+
+- run the failing scenario test first
+- normalize that result into `failed_tests`, `failure_summary`, `failure_output`, and likely repo-local modules
+- place that normalized failure record at the top of `context.txt`
+
+### Phase 2: Repo Delta Enrichment
+
+- inspect recent changed Python files from the working tree or previous commit
+- keep only delta that overlaps the failing test context
+- attach that bounded signal under `# RECENT_REPO_DELTA` and `# RECENT_REPO_DELTA_DIFF`
+
+### Phase 3: Structured Scenario Memory
+
+- load `test_scenarios/`
+- attach high-confidence matches automatically under `# SCENARIO_MATCH` and `# TEST_SCENARIO_RECORD`
+- attach medium-confidence candidates cautiously under `# SCENARIO_CANDIDATE`
+
+### Phase 4: Clarification Gate
+
+- if the failure cannot be classified confidently enough, stop before backend generation
+- write `output/<scenario>/clarification_request.json`
+- use that artifact to review the targeted contract questions before retrying repair generation
+
+### Phase 5: Reviewable Scenario Write-Back
+
+- when the failure looks new or only partially classified, auto-draft `output/<scenario>/scenario_proposal.json`
+- do not persist that proposal silently
+- approve it explicitly with:
+
+```bash
+python3 ci_loop.py approve-scenario-proposal --scenario scenario_1_integration_bug
+```
 
 ## Core Commands
 
@@ -227,6 +281,7 @@ Check the intentionally failing baseline:
 python3 ci_loop.py test --scenario scenario_1_integration_bug
 python3 ci_loop.py test --scenario scenario_2_wrong_fix_path
 python3 ci_loop.py test --scenario scenario_3_refactor_bug
+python3 ci_loop.py test --scenario scenario_4_low_confidence
 ```
 
 Run one scenario:
@@ -235,16 +290,59 @@ Run one scenario:
 python3 ci_loop.py run --scenario scenario_1_integration_bug
 ```
 
+Demo-safe run (revert accepted fixes after validation):
+
+```bash
+python3 ci_loop.py run --scenario scenario_1_integration_bug --dryRun
+```
+
 Run the full sweep:
 
 ```bash
 python3 ci_loop.py run-all --max-retries 2
 ```
 
+Demo-safe full sweep:
+
+```bash
+python3 ci_loop.py run-all --max-retries 2 --dryRun
+```
+
+Note: `run-all` executes only gating scenarios (1 to 3). `scenario_4_low_confidence` is excluded on purpose so pre-commit and CI gate flows stay green while still allowing a dedicated low-confidence demo.
+
+Run all scenarios including scenario 4 (default fail-closed clarification policy):
+
+```bash
+python3 ci_loop.py run-all --include-non-gating --max-retries 2 --dryRun
+```
+
+Run all scenarios including scenario 4 with interactive clarification:
+
+```bash
+python3 ci_loop.py run-all --include-non-gating --clarification-policy interactive --max-retries 2 --dryRun
+```
+
+Run scenario 4 with forced heuristic clarification options:
+
+```bash
+python3 ci_loop.py run --scenario scenario_4_low_confidence --clarification-policy interactive --clarifier-option-source heuristic --max-retries 1 --dryRun
+```
+
+Clarification policy behavior:
+
+- `fail` (default): writes clarification artifacts and exits before low-confidence generation
+- `interactive`: prompts the operator with explicit clarification questions plus recommended options, supports `edit`/`e` rounds for answer refinement, accepts `yes`/`y` to continue, records the interactive trace in `clarification_dialog.json`, then proceeds using the resolved answers as runtime context. This works in a real terminal and also with piped stdin for scripted demos.
+- The runtime log now prints concise mode banners and does not print the full clarifier prompt template.
+
+Clarifier option source behavior (interactive mode only):
+
+- `--clarifier-option-source backend` (default): options come from the configured backend clarifier
+- `--clarifier-option-source heuristic`: backend clarifier calls are bypassed and deterministic heuristic options are used
+
 Run explicitly with the local development backend:
 
 ```bash
-python3 ci_loop.py run-all --max-retries 1
+python3 ci_loop.py run-all --max-retries 2
 ```
 
 Run explicitly with the remote CI backend:
@@ -256,14 +354,38 @@ python3 ci_loop.py run-all --backend openai_responses_api --max-retries 2
 If you want to force the local path explicitly, you can still pass:
 
 ```bash
-python3 ci_loop.py run-all --backend codex --max-retries 1
+python3 ci_loop.py run-all --backend codex --max-retries 2
+```
+
+Generate context and any clarification artifacts without attempting a repair:
+
+```bash
+python3 ci_loop.py build-context --scenario scenario_2_wrong_fix_path
+python3 ci_loop.py plan-clarification --scenario scenario_2_wrong_fix_path
+python3 ci_loop.py plan-clarification --scenario scenario_4_low_confidence
+```
+
+Low-confidence artifact demo:
+
+```bash
+cat output/scenario_4_low_confidence/clarification_request.json | jq .
+cat output/scenario_4_low_confidence/scenario_proposal.json | jq .
+# interactive mode only:
+cat output/scenario_4_low_confidence/clarification_dialog.json | jq .
+```
+
+Approve a reviewed proposal into `test_scenarios/`:
+
+```bash
+python3 ci_loop.py approve-scenario-proposal --scenario scenario_2_wrong_fix_path
 ```
 
 With the default `codex` backend, `run` and `run-all` work without an `OPENAI_API_KEY` when the Codex CLI is available. The backup `openai_responses_api` route still requires a valid `OPENAI_API_KEY` in `.env` or the shell environment, plus network access to the OpenAI Responses API.
 
 ## Shared Prompt
 
-The shared repair-review prompt lives in [code_review.prompt](code_review.prompt).
+The shared repair-review prompt lives in [ci_gatekeeper_reviewer.prompt](ci_gatekeeper_reviewer.prompt).
+The shared interactive clarification template lives in [ci_gatekeeper_clarifier.prompt](ci_gatekeeper_clarifier.prompt).
 
 Both backends use it:
 
@@ -271,6 +393,7 @@ Both backends use it:
 - `openai_responses_api` uses the same prompt body as the repair request sent through the Responses API
 
 That keeps the repair stance in one file instead of duplicating prompt logic across backends.
+The clarification template keeps reverse-prompting behavior consistent: recommended options first, explicit alternatives, and free-text fallback.
 
 ## Operating Intent
 
@@ -279,7 +402,7 @@ That keeps the repair stance in one file instead of duplicating prompt logic acr
 Use `codex` as the developer-side gate before code leaves the laptop. The intended pattern is:
 
 1. A developer changes code locally.
-2. A local hook or manual command runs `python3 ci_loop.py run-all --backend codex --max-retries 1`.
+2. A local hook or manual command runs `python3 ci_loop.py run-all --backend codex --max-retries 2`.
 3. Codex proposes a minimal patch and the loop validates it immediately.
 4. The developer only proceeds to commit if the generated repair path actually validates.
 
@@ -301,9 +424,9 @@ In a real pipeline, you would usually add lint, static analysis, and security ch
 
 The current repo state has been re-verified on both backends:
 
-- Broken baseline checks fail for all three scenarios, which is the intended demo starting state.
-- `python3 ci_loop.py run-all --max-retries 1` passes end to end with `openai_responses_api`.
-- `python3 ci_loop.py run-all --backend codex --max-retries 1` passes end to end with `codex`.
+- Broken baseline checks fail for all four scenarios, which is the intended demo starting state.
+- `python3 ci_loop.py run-all --backend openai_responses_api --max-retries 2` passes end to end with `openai_responses_api`.
+- `python3 ci_loop.py run-all --backend codex --max-retries 2` passes end to end with `codex`.
 
 That means both the remote CI path and the local developer path are currently working in this repo.
 
@@ -314,17 +437,24 @@ Each scenario writes artifacts under `output/<scenario>/`:
 - `context.txt`
 - backend-specific raw artifact such as `response.json` or `response.md`
 - `patch.diff`
+- optional `clarification_request.json`
+- optional `scenario_proposal.json`
+- optional `clarification_dialog.json` (interactive mode only)
 
 ### What Each Artifact Means
 
-- `context.txt`: the exact source-and-test snapshot sent to the model for that scenario. Use this to inspect what the model saw.
+- `context.txt`: the failure-driven input snapshot sent to the model for that scenario. It includes the normalized failure record, raw failure output, dynamically discovered local code context, bounded recent repo delta when relevant, matched or candidate `test_scenarios/` knowledge when confidence warrants it, optional clarification metadata when the loop is blocked, and the static scenario fallback files.
 - `response.json`: the raw OpenAI Responses API output for the `openai_responses_api` backend.
 - `response.md`: the raw backend log for the implemented `codex` backend.
 - `patch.diff`: the unified diff rendered locally from backend output. Use this to review, apply, or discuss the concrete code change.
+- `clarification_request.json`: the confidence-gated question set the operator should review before allowing a low-confidence repair path.
+- `scenario_proposal.json`: an auto-drafted `test_scenarios/` candidate that still requires explicit approval before it becomes durable repo knowledge.
+- `clarification_dialog.json`: full interactive trace with suggested options, selected inputs, answer revisions, backend source, and response-thread ids (for `openai_responses_api`).
+  The Responses API clarifier path chains `previous_response_id` across question turns so option generation retains conversation context.
 
 ### How To Use The Artifacts
 
-1. Open `context.txt` to see the exact input state.
+1. Open `context.txt` to see the exact failure-driven input state.
 2. Open the backend-specific raw artifact to inspect the generator output:
    `response.json` for `openai_responses_api`, `response.md` for `codex`.
 3. Open `patch.diff` to inspect the exact code change the loop will apply.
@@ -333,9 +463,12 @@ Each scenario writes artifacts under `output/<scenario>/`:
 
 Short version:
 
-- `context.txt` = input
-- `response.json` or `response.md` = raw backend output
+- `context.txt` = failure record + failure output + relevant code input + recent repo delta + matched or candidate scenario knowledge
+- `response.json` or `response.md` = raw backend output, depending on the backend mode selecting in run-time
 - `patch.diff` = concrete code change derived from that output
+- `clarification_request.json` = stop-and-review signal for low-confidence failures
+- `scenario_proposal.json` = reviewable recurring-scenario draft, not durable state yet
+- `clarification_dialog.json` = detailed Q&A transcript for auditability and debugging
 
 Verified current artifact targets:
 

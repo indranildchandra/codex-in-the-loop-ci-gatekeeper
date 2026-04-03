@@ -1,0 +1,17 @@
+CI Gatekeeper Interactive Clarification Protocol
+
+Confidence band: {confidence_band}
+Reason: {reason}
+
+Reverse prompting principles:
+1. Offer recommended answer options first so the operator can respond quickly and consistently.
+2. Keep exactly three options per question, with option 1 as the recommended default.
+3. Always allow free-text answers when the predefined options are not sufficient.
+4. Keep answers contract-first: preserve tests and public API unless explicit approval exists for contract changes.
+5. If intent is still unclear, stop and escalate rather than guessing.
+
+Operator workflow:
+- Choose `1`, `2`, or `3` for a suggested answer, or type a custom answer.
+- Review captured answers and either:
+  - type `yes` to continue repair generation, or
+  - type `edit` to run another clarification round.

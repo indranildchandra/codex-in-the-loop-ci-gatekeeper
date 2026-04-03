@@ -6,4 +6,4 @@ REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$REPO_ROOT"
 
 echo "[ci-gatekeeper] Running local Codex gate before commit..."
-python3 ci_loop.py pre-commit-gate --max-retries 1
+python3 ci_loop.py pre-commit-gate --max-retries 2

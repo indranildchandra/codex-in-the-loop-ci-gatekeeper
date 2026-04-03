@@ -1,0 +1,28 @@
+{
+  "id": "refactor_contract_drift_bug",
+  "title": "Caller-callee contract drift after refactor",
+  "origin": "repo-seeded",
+  "failure_signatures": [
+    "100.1 != 110",
+    "percentage tax contract drift"
+  ],
+  "affected_tests": [
+    "tests/test_scenario_3_refactor_bug.py"
+  ],
+  "likely_code_areas": [
+    "orders.py",
+    "pricing.py"
+  ],
+  "invariants": [
+    "the pricing.calculate_total percentage-based tax contract must be preserved"
+  ],
+  "accepted_fix_patterns": [
+    "repair the caller to match the refactored contract",
+    "keep percentage-based semantics"
+  ],
+  "rejected_fix_patterns": [
+    "change pricing.py back to decimal tax input",
+    "modify tests"
+  ],
+  "review_required": true
+}
