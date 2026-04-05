@@ -30,7 +30,7 @@ E       AssertionError: None != 'Indranil'
 tests/test_scenario_1_integration_bug.py:14: AssertionError
 =========================== short test summary info ============================
 FAILED tests/test_scenario_1_integration_bug.py::IntegrationBugTests::test_email_lookup_case_insensitive
-1 failed in 0.06s
+1 failed in 0.02s
 
 # SCENARIO_MATCH
 {

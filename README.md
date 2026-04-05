@@ -441,6 +441,18 @@ Each scenario writes artifacts under `output/<scenario>/`:
 - optional `scenario_proposal.json`
 - optional `clarification_dialog.json` (interactive mode only)
 
+### Quick File References (Real Outputs)
+
+Use these concrete files when demoing so people can inspect actual artifacts instead of imagining the flow:
+
+- context snapshot: [output/scenario_4_low_confidence/context.txt](output/scenario_4_low_confidence/context.txt)
+- codex raw output: [output/scenario_4_low_confidence/response.md](output/scenario_4_low_confidence/response.md)
+- responses API raw output: [output/scenario_4_low_confidence/response.json](output/scenario_4_low_confidence/response.json)
+- rendered patch: [output/scenario_4_low_confidence/patch.diff](output/scenario_4_low_confidence/patch.diff)
+- low-confidence request artifact: [output/scenario_4_low_confidence/clarification_request.json](output/scenario_4_low_confidence/clarification_request.json)
+- recurring-scenario draft artifact: [output/scenario_4_low_confidence/scenario_proposal.json](output/scenario_4_low_confidence/scenario_proposal.json)
+- interactive clarification trace: [output/scenario_4_low_confidence/clarification_dialog.json](output/scenario_4_low_confidence/clarification_dialog.json)
+
 ### What Each Artifact Means
 
 - `context.txt`: the failure-driven input snapshot sent to the model for that scenario. It includes the normalized failure record, raw failure output, dynamically discovered local code context, bounded recent repo delta when relevant, matched or candidate `test_scenarios/` knowledge when confidence warrants it, optional clarification metadata when the loop is blocked, and the static scenario fallback files.
