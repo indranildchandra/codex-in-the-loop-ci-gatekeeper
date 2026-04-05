@@ -22,11 +22,46 @@ This workflow is currently failure-driven and test-first.
 - This workflow is not designed as a general code-review agent. It is a code-fix gate for buggy implementations detected by failing pre-defined tests.
 - For repositories that do not define tests before implementation, this workflow has limited practical value.
 
-## Core Principles
+## Core Principles And Philosophy
 
-- `zero-trust`: this is built as a workflow guard, not as an optional engineer habit. If review depends on someone remembering to trigger a sub-agent before push, it will eventually be skipped.
-- `automation over memory`: the repo now includes a real tracked pre-commit gate, so the local review path can be enforced by tooling instead of process discipline.
-- `model council`: a non-Anthropic-family reviewer checking Anthropic-family generated code is a deliberate choice to reduce same-model bias and improve output quality plus test coverage.
+### Observations that drove the design of this repo
+
+1. `tdd + humans > vibe tests`:
+   If teams are shipping large amounts of AI-generated code, TDD has to be a first-class constraint. The system still needs a human to define expected behavior in executable functional test cases. Without that, "tests" degrade into weak synthetic checks that do not describe the actual product contract.
+2. `zero-trust`:
+   Test-and-fix should be a workflow guard, not an optional developer habit. If the guard can be skipped, someone will skip it under time pressure.
+3. `automation > manual process`:
+   Tooling beats process memory. A tracked pre-commit hook and a CI-enforced post-commit gate are stronger controls than a team norm that says "please remember to run the reviewer."
+4. `model council > single model`:
+   Using a non-Anthropic-family model to check Anthropic-family generated code is deliberate. It reduces same-model bias and usually produces a healthier review surface than asking one model family to repeatedly validate itself.
+5. `ralph-loop-for-fixing-ai-slop`:
+   Developers often use one AI to generate code and then ask the same or similar AI to fix the fallout manually. This repo pushes that repair step into a controlled validation loop so the model must satisfy the tests instead of asking the human to carry the debugging burden.
+
+Those observations led to this repo: put the coding model inside a constrained repair loop, not at the end of the workflow.
+
+### How this repo is different
+
+- the loop detects failing tests
+- it builds a failure-driven context snapshot from test results, repo delta, and local dependencies
+- it asks the configured backend for a candidate patch
+- it applies the patch, reruns validation, and decides whether to accept or reject it
+- the model does not decide success; the loop does
+
+### Why TDD alone is not enough
+
+TDD helps only if the tests remain the source of truth. One common AI failure mode is changing the tests to match the code it just wrote, which can create a synthetic pass while the real behavior is still wrong. This repo assumes the tests are the contract and keeps the acceptance decision outside the model.
+
+### Why this is not a code review tool
+
+Code review tools optimize for quality, style, or risk signals. This workflow is narrower and more concrete: it is a code-fix gate for buggy implementations that are already failing pre-defined tests.
+
+### Why Codex
+
+Ask a friend to identify your flaws, they soften the feedback. Model biases are real. Anyone shipping AI-generated code to prod knows this. Since I am writing most of the code using Anthropic models, OpenAI models were my preferred choice.
+
+### Summary
+
+![Codex-in-the-loop observations](demo_screenshots/codex-in-the-loop-my-observations.png)
 
 ## Why This Repo Exists
 
