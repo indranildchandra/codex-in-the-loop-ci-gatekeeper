@@ -537,7 +537,7 @@ python3 ci_loop.py apply --scenario scenario_3_refactor_bug
 python3 ci_loop.py test --scenario scenario_3_refactor_bug
 ```
 
-Or show the remote backup API call directly:
+Or inspect the remote backup API path directly:
 
 ```bash
 curl https://api.openai.com/v1/responses \
@@ -545,27 +545,25 @@ curl https://api.openai.com/v1/responses \
   -H "Authorization: Bearer $OPENAI_API_KEY" \
   -d '{
     "model": "gpt-4.1",
+    "instructions": "Return only strict JSON. Do not include markdown fences, prose, or commentary.",
     "input": [
       {
-        "role": "system",
-        "content": "You are a senior engineer. Maintain system invariants."
-      },
-      {
         "role": "user",
-        "content": "Fix the failing test. Return only a diff."
-      },
-      {
-        "role": "user",
-        "content": "'"$(cat output/scenario_3_refactor_bug/context.txt | sed 's/"/\\"/g')"'"
+        "content": [
+          {
+            "type": "input_text",
+            "text": "Return only JSON matching this schema: {\"edits\":[{\"path\":\"relative/path.py\",\"content\":\"full updated file contents\"}]}. Only include files that need to change.\n\nFix the failing tests in tests/test_scenario_3_refactor_bug.py. Do not modify tests. Do not change the pricing.calculate_total contract. Only edit the minimum code needed, preferably in orders.py. Preserve the refactored percentage-based tax semantics.\n\nRepository context follows.\n\n'"$(cat output/example_scenario/context.txt | sed 's/"/\\"/g')"'" 
+          }
+        ]
       }
     ]
   }' | tee output/scenario_3_refactor_bug/response.json
 ```
 
-Then extract, apply, and validate:
+For actual patch rendering/apply/validation, use the supported CLI path:
 
 ```bash
-python3 ci_loop.py extract-patch --scenario scenario_3_refactor_bug
+python3 ci_loop.py generate-patch --scenario scenario_3_refactor_bug --backend openai_responses_api
 python3 ci_loop.py apply --scenario scenario_3_refactor_bug
 python3 ci_loop.py test --scenario scenario_3_refactor_bug
 ```
