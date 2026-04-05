@@ -492,9 +492,13 @@ What happens live:
 
 ## What The Artifacts Mean
 
-- `context.txt`: what the model saw
-- `response.json` or `response.md`: raw backend output, depending on whether the loop used `openai_responses_api` or `codex`
-- `patch.diff`: the concrete change rendered locally and applied for validation
+- `context.txt`: the failure-driven input snapshot sent to the backend for that scenario. It includes normalized failure facts, raw failure output, relevant code context, and scenario-memory enrichment when available.
+- `response.json`: raw output from the `openai_responses_api` backend.
+- `response.md`: raw output/log from the `codex` backend.
+- `patch.diff`: the concrete unified diff rendered from backend output and used for apply/validate.
+- `clarification_request.json`: generated when confidence is low and policy is fail-closed; defines the questions that must be resolved before generation proceeds.
+- `scenario_proposal.json`: generated in low-confidence paths as a draft recurring scenario record for later approval into `test_scenarios/`.
+- `clarification_dialog.json`: generated in interactive clarification mode; captures questions, suggested options, chosen answers, answer edits, backend source (`backend` or `heuristic`), and response-thread ids when applicable.
 
 ## One-Line Summary Per Scenario
 
@@ -508,3 +512,15 @@ What happens live:
 The model proposes a change.
 
 The loop decides whether the change deserves to live.
+
+## Quick Demo Reference (Command -> Artifact -> Screenshot)
+
+| Step | Command | Artifact | Screenshot |
+| --- | --- | --- | --- |
+| Build scenario 4 context | `python3 ci_loop.py build-context --scenario scenario_4_low_confidence` | `output/scenario_4_low_confidence/context.txt` | `demo_screenshots/scenario_4_low_confidence-context-txt.png` |
+| Generate patch with codex | `python3 ci_loop.py generate-patch --scenario scenario_4_low_confidence --backend codex` | `output/scenario_4_low_confidence/response.md` | `demo_screenshots/scenario_4_low_confidence-response-md.png` |
+| Generate patch with openai responses | `python3 ci_loop.py generate-patch --scenario scenario_4_low_confidence --backend openai_responses_api` | `output/scenario_4_low_confidence/response.json` | `demo_screenshots/scenario_4_low_confidence-response-json.png` |
+| Inspect rendered diff | `cat output/scenario_4_low_confidence/patch.diff` | `output/scenario_4_low_confidence/patch.diff` | `demo_screenshots/scenario_4_low_confidence-patch-diff.png` |
+| Plan clarification artifacts | `python3 ci_loop.py plan-clarification --scenario scenario_4_low_confidence` | `output/scenario_4_low_confidence/clarification_request.json` | `demo_screenshots/scenario_4_low_confidence-clarification_request-json.png` |
+| Plan clarification artifacts | `python3 ci_loop.py plan-clarification --scenario scenario_4_low_confidence` | `output/scenario_4_low_confidence/scenario_proposal.json` | `demo_screenshots/scenario_4_low_confidence-scenario_proposal-json.png` |
+| Interactive clarification trace | `python3 ci_loop.py run --scenario scenario_4_low_confidence --clarification-policy interactive --max-retries 1 --dryRun` | `output/scenario_4_low_confidence/clarification_dialog.json` | `demo_screenshots/scenario_4_low_confidence-clarification_dialog-json.png` |

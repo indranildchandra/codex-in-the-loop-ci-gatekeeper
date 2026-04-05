@@ -6,4 +6,5 @@ REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$REPO_ROOT"
 
 echo "[ci-gatekeeper] Running local Codex gate before commit..."
+echo "[ci-gatekeeper] To bypass once: SKIP_CI_GATEKEEPER_PRE_COMMIT=1 git commit -m \"<message>\""
 python3 ci_loop.py pre-commit-gate --max-retries 2

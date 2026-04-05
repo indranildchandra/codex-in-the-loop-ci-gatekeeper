@@ -209,6 +209,18 @@ Hook control options:
 
 That gives you a stable repo-level switch plus a one-off escape hatch for local testing.
 
+### Commit Gotcha (Common Local Confusion)
+
+If `git commit` appears to "hang" or starts printing CI loop logs, that is expected in this repo: the tracked pre-commit hook is running the local gate.
+
+Use this for a one-time bypass:
+
+```bash
+SKIP_CI_GATEKEEPER_PRE_COMMIT=1 git commit -m "<message>"
+```
+
+If you need to disable the hook repo-wide for local experimentation, set `git_hooks.pre_commit_enabled` to `false` in [ci_config.json](ci_config.json) or unset `core.hooksPath`.
+
 Important limit:
 
 The default backend is now `codex`, so the repo can run without any OpenAI API key dependency when you use the Codex CLI path. The backup `openai_responses_api` route still calls `https://api.openai.com/v1/responses`, so it requires network access and an API key.
@@ -331,7 +343,7 @@ python3 ci_loop.py run --scenario scenario_4_low_confidence --clarification-poli
 Clarification policy behavior:
 
 - `fail` (default): writes clarification artifacts and exits before low-confidence generation
-- `interactive`: prompts the operator with explicit clarification questions plus recommended options, supports `edit`/`e` rounds for answer refinement, accepts `yes`/`y` to continue, records the interactive trace in `clarification_dialog.json`, then proceeds using the resolved answers as runtime context. This works in a real terminal and also with piped stdin for scripted demos.
+- `interactive`: prompts the operator with explicit clarification questions plus recommended options, supports `edit`/`e` rounds for answer refinement, accepts `yes`/`y` to continue, records the interactive trace in `clarification_dialog.json`, and then proceeds using the resolved answers as runtime context. This works in a real terminal and also with piped stdin for scripted demos.
 - The runtime log now prints concise mode banners and does not print the full clarifier prompt template.
 
 Clarifier option source behavior (interactive mode only):
@@ -453,6 +465,25 @@ Use these concrete files when demoing so people can inspect actual artifacts ins
 - recurring-scenario draft artifact: [output/scenario_4_low_confidence/scenario_proposal.json](output/scenario_4_low_confidence/scenario_proposal.json)
 - interactive clarification trace: [output/scenario_4_low_confidence/clarification_dialog.json](output/scenario_4_low_confidence/clarification_dialog.json)
 
+### Screenshot Walkthrough (Scenario 4)
+
+These screenshots map 1:1 to the artifact files above:
+
+- Context snapshot  
+  ![Context snapshot](demo_screenshots/scenario_4_low_confidence-context-txt.png)
+- Codex raw output  
+  ![Codex raw output](demo_screenshots/scenario_4_low_confidence-response-md.png)
+- Responses API raw output  
+  ![Responses API raw output](demo_screenshots/scenario_4_low_confidence-response-json.png)
+- Rendered patch  
+  ![Rendered patch](demo_screenshots/scenario_4_low_confidence-patch-diff.png)
+- Low-confidence request artifact  
+  ![Low-confidence request artifact](demo_screenshots/scenario_4_low_confidence-clarification_request-json.png)
+- Recurring-scenario draft artifact  
+  ![Recurring-scenario draft artifact](demo_screenshots/scenario_4_low_confidence-scenario_proposal-json.png)
+- Interactive clarification trace  
+  ![Interactive clarification trace](demo_screenshots/scenario_4_low_confidence-clarification_dialog-json.png)
+
 ### What Each Artifact Means
 
 - `context.txt`: the failure-driven input snapshot sent to the model for that scenario. It includes the normalized failure record, raw failure output, dynamically discovered local code context, bounded recent repo delta when relevant, matched or candidate `test_scenarios/` knowledge when confidence warrants it, optional clarification metadata when the loop is blocked, and the static scenario fallback files.
@@ -476,7 +507,7 @@ Use these concrete files when demoing so people can inspect actual artifacts ins
 Short version:
 
 - `context.txt` = failure record + failure output + relevant code input + recent repo delta + matched or candidate scenario knowledge
-- `response.json` or `response.md` = raw backend output, depending on the backend mode selecting in run-time
+- `response.json` or `response.md` = raw backend output, depending on the selected backend mode
 - `patch.diff` = concrete code change derived from that output
 - `clarification_request.json` = stop-and-review signal for low-confidence failures
 - `scenario_proposal.json` = reviewable recurring-scenario draft, not durable state yet
@@ -531,16 +562,23 @@ curl https://api.openai.com/v1/responses \
   }' | tee output/scenario_3_refactor_bug/response.json
 ```
 
+Then extract, apply, and validate:
+
 ```bash
 python3 ci_loop.py extract-patch --scenario scenario_3_refactor_bug
 python3 ci_loop.py apply --scenario scenario_3_refactor_bug
 python3 ci_loop.py test --scenario scenario_3_refactor_bug
 ```
 
+## TODO / Next Steps
+
+- Expose this CI gatekeeper utility as a reusable skill inside Claude Code so teams can invoke it natively from their local agent workflow.
+- Package this repository as a Claude Code plugin so the gate can be installed and invoked as a first-class plugin capability.
+
 ## Repo Summary
 
-The Codex CLI is the default local path. The Responses API call is the backup route for CI or when you explicitly choose `openai_responses_api`.
+The Codex CLI is the default local path. The Responses API call is the backup route for CI (when you run it inside Enterprise CI setup - hosted on Jenkins-type servers) or when you explicitly choose `openai_responses_api`.
 
 The model is not the system. The loop is the system.
 
-See [PLAYBOOK.md](PLAYBOOK.md) for the walkthrough of demo and [DEMO-COMMANDS.md](DEMO-COMMANDS.md) for the live sequence.
+See [PLAYBOOK.md](PLAYBOOK.md) for the demo walkthrough and [DEMO-COMMANDS.md](DEMO-COMMANDS.md) for the live command sequence.
