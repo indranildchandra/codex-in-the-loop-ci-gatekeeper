@@ -2168,21 +2168,27 @@ def render_patch_from_edits(edits: list[dict]) -> str:
         if not path.exists():
             raise RuntimeError(f"Edit path does not exist in the repo: {relative_path}")
 
-        original_lines = [f"{line}\n" for line in path.read_text().splitlines()]
-        updated_lines = [f"{line}\n" for line in content.splitlines()]
+        # keepends preserves exact line endings (including a missing final
+        # newline), and the a/ b/ prefixes make the diff a well-formed
+        # `git apply -p1` patch rather than a p0 diff only patch(1) accepts.
+        original_lines = path.read_text().splitlines(keepends=True)
+        updated_lines = content.splitlines(keepends=True)
 
         diff = list(
             difflib.unified_diff(
                 original_lines,
                 updated_lines,
-                fromfile=relative_path,
-                tofile=relative_path,
+                fromfile=f"a/{relative_path}",
+                tofile=f"b/{relative_path}",
             )
         )
         if diff:
-            patch_chunks.append("".join(diff))
+            chunk = "".join(diff)
+            if not chunk.endswith("\n"):
+                chunk += "\n"
+            patch_chunks.append(chunk)
 
-    return "".join(patch_chunks).strip()
+    return "".join(patch_chunks)
 
 
 def generate_patch(

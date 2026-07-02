@@ -137,6 +137,39 @@ class TracebackParsingTests(unittest.TestCase):
         self.assertEqual(ci_loop.parse_traceback_paths(noise), ())
 
 
+class RenderPatchTests(unittest.TestCase):
+    def test_rendered_patch_is_git_apply_compatible(self) -> None:
+        # The default codex/openai backends return edits that are rendered into a
+        # diff. That diff must be a well-formed `git apply -p1` patch (a/ b/
+        # prefixes, trailing newline) so the strict applier engages instead of
+        # silently falling back to fuzzy patch(1).
+        source = ci_loop.REPO_ROOT / "user_store.py"
+        original = source.read_text()
+        edits = [{"path": "user_store.py", "content": original + "\n# trailing edit\n"}]
+        patch = ci_loop.render_patch_from_edits(edits)
+
+        self.assertTrue(patch.startswith("--- a/user_store.py\n+++ b/user_store.py\n"), patch[:80])
+        self.assertTrue(patch.endswith("\n"))
+
+        backups = ci_loop.snapshot_files([source])
+        patch_file = ci_loop.REPO_ROOT / "output" / "_render_probe.diff"
+        try:
+            applied, output = ci_loop.apply_patch_text(patch, patch_file)
+            self.assertTrue(applied, msg=output)
+            self.assertIn("git apply", output)
+        finally:
+            ci_loop.restore_files(backups)
+            if patch_file.exists():
+                patch_file.unlink()
+
+    def test_rendered_test_patch_is_still_detected_as_protected(self) -> None:
+        target = "tests/test_scenario_1_integration_bug.py"
+        original = (ci_loop.REPO_ROOT / target).read_text()
+        edits = [{"path": target, "content": original + "\n# tamper\n"}]
+        patch = ci_loop.render_patch_from_edits(edits)
+        self.assertEqual(ci_loop.patch_protected_targets(patch), [target])
+
+
 class GitApplyTests(unittest.TestCase):
     def test_valid_patch_applies_to_scratch_file(self) -> None:
         # Operate on a throwaway file so this test never mutates real sources,
