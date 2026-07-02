@@ -216,8 +216,12 @@ Supported backends today:
 
 Backend-specific runtime requirements:
 
-- `codex` requires a working authenticated Codex CLI session and available Codex usage quota
-- `openai_responses_api` requires `OPENAI_API_KEY` plus network access
+- `codex` requires the Codex CLI installed and on `PATH` (the loop resolves the `codex` binary before calling it and fails fast with guidance if it is missing), a working authenticated Codex CLI session, and available Codex usage quota
+- `openai_responses_api` requires `OPENAI_API_KEY` plus network access; it uses only the Python standard library for HTTP, so no extra pip package is needed
+
+Python prerequisites:
+
+- The loop itself runs on the Python standard library. `requirements.txt` pins only `pytest`, which is optional: when `pytest` is available the loop validates with it, otherwise it falls back to `python -m unittest`. Install it with `pip install -r requirements.txt` if you want the pytest path.
 
 Optional local viewer:
 
