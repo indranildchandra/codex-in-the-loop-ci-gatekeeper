@@ -47,6 +47,14 @@ Those observations led to this repo: put the coding model inside a constrained r
 - it applies the patch, reruns validation, and decides whether to accept or reject it
 - the model does not decide success; the loop does
 
+### Acceptance Guardrails
+
+The "tests are the contract" claim is enforced by the loop, not left to the prompt:
+
+- Tests are immutable. Any candidate patch that touches a path under `tests/` (or resolves outside the repo) is rejected before it is applied, in both the repair loop and the standalone `apply` command. The model cannot manufacture a green run by editing the assertions.
+- Acceptance runs a regression gate, not just the failing test. Before repairing, the loop records the test files that are currently green (excluding the scenario under repair, which is red by design). An accepted patch must keep all of them green, or it is reverted and the loop retries.
+- Patches are applied strictly. The loop prefers `git apply` (which refuses to apply with fuzz) and only falls back to `patch(1)` when git apply is unavailable or the diff context is imperfect.
+
 ### Why TDD alone is not enough
 
 TDD helps only if the tests remain the source of truth. One common AI failure mode is changing the tests to match the code it just wrote, which can create a synthetic pass while the real behavior is still wrong. This repo assumes the tests are the contract and keeps the acceptance decision outside the model.
@@ -216,8 +224,12 @@ Supported backends today:
 
 Backend-specific runtime requirements:
 
-- `codex` requires a working authenticated Codex CLI session and available Codex usage quota
-- `openai_responses_api` requires `OPENAI_API_KEY` plus network access
+- `codex` requires the Codex CLI installed and on `PATH` (the loop resolves the `codex` binary before calling it and fails fast with guidance if it is missing), a working authenticated Codex CLI session, and available Codex usage quota
+- `openai_responses_api` requires `OPENAI_API_KEY` plus network access; it uses only the Python standard library for HTTP, so no extra pip package is needed
+
+Python prerequisites:
+
+- The loop itself runs on the Python standard library. `requirements.txt` pins only `pytest`, which is optional: when `pytest` is available the loop validates with it, otherwise it falls back to `python -m unittest`. Install it with `pip install -r requirements.txt` if you want the pytest path.
 
 Optional local viewer:
 

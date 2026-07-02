@@ -1,1 +1,4 @@
+# Optional. The loop runs on the Python standard library alone and falls back
+# to `python -m unittest` when pytest is absent. Install this only if you want
+# the loop (and the demo tests) to validate via pytest.
 pytest==8.3.5
