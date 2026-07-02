@@ -945,12 +945,26 @@ def summarize_failure_output(output: str) -> str:
     return "No failure output captured."
 
 
+# Source references appear in two traceback dialects:
+#   - CPython / unittest:  File "path/to/mod.py", line 12, in func
+#   - pytest (incl. -q):   path/to/mod.py:12: in func   /   mod.py:12: SomeError
+# Matching both keeps likely_modules (and the failure-confidence "resolved
+# source" signal) accurate regardless of which runner produced the output.
+TRACEBACK_PATH_PATTERN = re.compile(
+    r'File "(?P<file>[^"]+)"'
+    r"|^[ \t]*(?P<pytest>\S+\.py):\d+",
+    re.MULTILINE,
+)
+
+
 def parse_traceback_paths(output: str) -> tuple[str, ...]:
     discovered: list[str] = []
     seen: set[str] = set()
 
-    for match in re.finditer(r'File "([^"]+)"', output):
-        raw_path = match.group(1)
+    for match in TRACEBACK_PATH_PATTERN.finditer(output):
+        raw_path = match.group("file") or match.group("pytest")
+        if not raw_path:
+            continue
         candidate = Path(raw_path)
         if not candidate.is_absolute():
             candidate = (REPO_ROOT / candidate).resolve()

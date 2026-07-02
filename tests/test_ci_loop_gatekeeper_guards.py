@@ -112,6 +112,31 @@ class RegressionGuardTests(unittest.TestCase):
         self.assertEqual(green, ("tests/test_ci_loop_context_builder.py",))
 
 
+class TracebackParsingTests(unittest.TestCase):
+    def test_pytest_location_lines_resolve_source_modules(self) -> None:
+        pytest_tb = (
+            "=================================== FAILURES ===================================\n"
+            "tests/test_scenario_3_refactor_bug.py:14:\n"
+            "orders.py:8: in create_order\n"
+            "    total = calculate_total(price, 0.1)\n"
+            "pricing.py:3: ZeroDivisionError\n"
+            "FAILED tests/test_scenario_3_refactor_bug.py::RefactorBugTests::test_x\n"
+        )
+        paths = ci_loop.parse_traceback_paths(pytest_tb)
+        self.assertIn("orders.py", paths)
+        self.assertIn("pricing.py", paths)
+        self.assertIn("tests/test_scenario_3_refactor_bug.py", paths)
+
+    def test_cpython_file_frames_still_resolve(self) -> None:
+        absolute = ci_loop.REPO_ROOT / "user_store.py"
+        cpython_tb = f'File "{absolute}", line 8, in add_user'
+        self.assertEqual(ci_loop.parse_traceback_paths(cpython_tb), ("user_store.py",))
+
+    def test_nonexistent_or_out_of_repo_paths_are_ignored(self) -> None:
+        noise = "prose mentioning notreal.py:5 and /etc/passwd:1: nowhere real"
+        self.assertEqual(ci_loop.parse_traceback_paths(noise), ())
+
+
 class GitApplyTests(unittest.TestCase):
     def test_valid_patch_applies_to_scratch_file(self) -> None:
         # Operate on a throwaway file so this test never mutates real sources,
