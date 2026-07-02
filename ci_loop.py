@@ -31,6 +31,10 @@ MAX_CLARIFICATION_PASSES = 3
 AUTO_SCENARIO_MATCH_THRESHOLD = 0.8
 CAUTIOUS_SCENARIO_MATCH_THRESHOLD = 0.5
 
+# Paths the repair loop must never let a generated patch touch. Tests are the
+# executable contract; if the model can edit them it can manufacture a green run.
+PROTECTED_PATH_PREFIXES = ("tests/",)
+
 
 @dataclass(frozen=True)
 class Scenario:
@@ -864,14 +868,50 @@ def validation_command(targets: tuple[str, ...]) -> list[str]:
     return [sys.executable, "-m", "unittest", "-q", *unittest_modules(targets)]
 
 
-def run_tests(scenario_name: str) -> tuple[bool, str]:
-    scenario = get_scenario(scenario_name)
+def run_test_targets(targets: tuple[str, ...]) -> tuple[bool, str]:
+    if not targets:
+        return True, "(no tests)"
     code, stdout, stderr = run_command(
-        validation_command(scenario.test_targets),
+        validation_command(targets),
         extra_env={"PYTEST_DISABLE_PLUGIN_AUTOLOAD": "1"},
     )
     output = "\n".join(part for part in [stdout.strip(), stderr.strip()] if part)
     return code == 0, output or "(no output)"
+
+
+def run_tests(scenario_name: str) -> tuple[bool, str]:
+    scenario = get_scenario(scenario_name)
+    return run_test_targets(scenario.test_targets)
+
+
+def discover_test_files() -> tuple[str, ...]:
+    tests_dir = REPO_ROOT / "tests"
+    if not tests_dir.is_dir():
+        return ()
+    discovered = sorted(
+        repo_relative_path(path)
+        for path in tests_dir.glob("test_*.py")
+        if path.is_file()
+    )
+    return tuple(path for path in discovered if path is not None)
+
+
+def collect_green_regression_set(exclude: tuple[str, ...]) -> tuple[str, ...]:
+    """Return test files that currently pass, excluding the scenario's own targets.
+
+    These are the tests the repair must not break. The scenario under repair is
+    red at baseline by design, so it is excluded; the remaining green tests form
+    the regression guard that an accepted patch has to keep green.
+    """
+    excluded = set(exclude)
+    green: list[str] = []
+    for test_file in discover_test_files():
+        if test_file in excluded:
+            continue
+        passed, _ = run_test_targets((test_file,))
+        if passed:
+            green.append(test_file)
+    return tuple(green)
 
 
 def repo_relative_path(path: Path) -> str | None:
@@ -924,6 +964,40 @@ def parse_traceback_paths(output: str) -> tuple[str, ...]:
     return tuple(discovered)
 
 
+def compute_failure_confidence(
+    tests_passed: bool,
+    failure_output: str,
+    likely_modules: tuple[str, ...],
+) -> float:
+    """Estimate how interpretable a failure is, not just whether one occurred.
+
+    The score feeds clarification gating: an opaque failure (no clean assertion,
+    no resolvable non-test source) scores below the cautious threshold so the loop
+    stops and asks rather than guessing the intended contract.
+    """
+    if tests_passed:
+        # No actionable failure signal to reason about.
+        return 0.4
+
+    score = 0.3
+
+    # Match a clean assertion line in either the unittest ("AssertionError: ...")
+    # or pytest ("E   AssertionError: ...") traceback format.
+    has_assertion = any(
+        re.match(r"^\s*(E\s+)?AssertionError\b", line) for line in failure_output.splitlines()
+    )
+    if has_assertion:
+        score += 0.35
+
+    resolved_source = any(
+        not module.startswith(PROTECTED_PATH_PREFIXES) for module in likely_modules
+    )
+    if resolved_source:
+        score += 0.2
+
+    return round(min(score, 0.9), 2)
+
+
 def build_failure_record(scenario_name: str) -> FailureRecord:
     scenario = get_scenario(scenario_name)
     tests_passed, failure_output = run_tests(scenario_name)
@@ -945,14 +1019,15 @@ def build_failure_record(scenario_name: str) -> FailureRecord:
     for relative_path in parse_traceback_paths(failure_output):
         add(relative_path)
 
-    confidence = 0.85 if not tests_passed else 0.4
+    likely_modules_tuple = tuple(likely_modules)
+    confidence = compute_failure_confidence(tests_passed, failure_output, likely_modules_tuple)
     failed_tests = scenario.test_targets if not tests_passed else ()
 
     return FailureRecord(
         failed_tests=failed_tests,
         failure_summary=summarize_failure_output(failure_output),
         failure_output=failure_output,
-        likely_modules=tuple(likely_modules),
+        likely_modules=likely_modules_tuple,
         confidence=confidence,
     )
 
@@ -1774,6 +1849,13 @@ def request_edit_plan_via_codex(prompt: str, context: str, model: str | None = N
     sandbox_mode = str(settings.get("sandbox", "read-only"))
     if not isinstance(command, list) or not all(isinstance(item, str) for item in command):
         raise RuntimeError("backend_settings.codex.command must be a list of strings.")
+    if not command or shutil.which(command[0]) is None:
+        raise RuntimeError(
+            f"The '{command[0] if command else 'codex'}' CLI was not found on PATH. "
+            "The codex backend requires the Codex CLI to be installed and available, "
+            "or switch to the openai_responses_api backend (set CI_LOOP_BACKEND or "
+            "backend in ci_config.json) with OPENAI_API_KEY set."
+        )
 
     schema = {
         "type": "object",
@@ -1974,6 +2056,27 @@ def patch_targets(patch_text: str) -> list[Path]:
     return targets
 
 
+def patch_protected_targets(patch_text: str) -> list[str]:
+    """Return repo-relative targets in the patch that fall under a protected path.
+
+    A non-empty result means the patch tries to edit files the loop treats as an
+    immutable contract (the test suite), and it must be rejected before apply.
+    """
+    protected: list[str] = []
+    seen: set[str] = set()
+    for path in patch_targets(patch_text):
+        relative = repo_relative_path(path)
+        if relative is None:
+            # Path escapes the repo root entirely; treat as protected (never apply).
+            relative = str(path)
+        elif not relative.startswith(PROTECTED_PATH_PREFIXES):
+            continue
+        if relative not in seen:
+            seen.add(relative)
+            protected.append(relative)
+    return protected
+
+
 def snapshot_files(paths: list[Path]) -> dict[Path, str | None]:
     backups: dict[Path, str | None] = {}
     for path in paths:
@@ -1995,18 +2098,44 @@ def apply_patch_text(patch_text: str, patch_file: Path) -> tuple[bool, str]:
     patch_file.parent.mkdir(parents=True, exist_ok=True)
     patch_file.write_text(patch_text)
 
+    attempts = 0
     last_output = ""
-    for strip_level in ("0", "1"):
-        result = subprocess.run(
-            ["patch", f"-p{strip_level}", "--forward", "--input", str(patch_file)],
-            cwd=REPO_ROOT,
-            capture_output=True,
-            text=True,
+
+    # Prefer git apply: it refuses to apply with fuzz, so a hunk can never land
+    # at the wrong offset and silently report success.
+    if git_is_available():
+        attempts += 1
+        check_code, _, check_err = run_git_command(["apply", "--check", str(patch_file)])
+        if check_code == 0:
+            apply_code, apply_out, apply_err = run_git_command(["apply", str(patch_file)])
+            combined = "\n".join(part for part in [apply_out.strip(), apply_err.strip()] if part)
+            if apply_code == 0:
+                return True, combined or "Patch applied cleanly with git apply."
+            last_output = combined
+        else:
+            last_output = check_err.strip()
+
+    # Fall back to patch(1). It applies with fuzz, so it is only used when the
+    # strict git apply path is unavailable or the diff context is imperfect.
+    if shutil.which("patch"):
+        for strip_level in ("0", "1"):
+            attempts += 1
+            result = subprocess.run(
+                ["patch", f"-p{strip_level}", "--forward", "--input", str(patch_file)],
+                cwd=REPO_ROOT,
+                capture_output=True,
+                text=True,
+            )
+            combined = "\n".join(part for part in [result.stdout.strip(), result.stderr.strip()] if part)
+            if result.returncode == 0:
+                return True, combined
+            last_output = combined
+
+    if attempts == 0:
+        return False, (
+            "No patch applier available: git apply requires a git work tree and "
+            "the patch(1) binary was not found on PATH."
         )
-        combined = "\n".join(part for part in [result.stdout.strip(), result.stderr.strip()] if part)
-        if result.returncode == 0:
-            return True, combined
-        last_output = combined
 
     return False, last_output
 
@@ -2111,6 +2240,14 @@ def run_demo(
             print("Run complete (live): repository state unchanged because scenario was already green.\n")
         return 0
 
+    regression_guard = collect_green_regression_set(scenario.test_targets)
+    if regression_guard:
+        print(
+            "Regression guard: an accepted fix must keep these currently-green tests green: "
+            + ", ".join(regression_guard)
+            + "\n"
+        )
+
     for attempt in range(1, max_retries + 1):
         prompt = scenario.base_prompt if attempt == 1 else scenario.constrained_prompt
         print(f"--- Attempt {attempt} ---")
@@ -2212,6 +2349,16 @@ def run_demo(
         print(patch_text[:800])
         print()
 
+        protected = patch_protected_targets(patch_text)
+        if protected:
+            print(
+                "Patch rejected: it would modify protected files that are treated as "
+                "the immutable contract: " + ", ".join(protected)
+            )
+            print("Tests define acceptance; the loop will not let a fix edit them.\n")
+            time.sleep(1)
+            continue
+
         backups = snapshot_files(patch_targets(patch_text))
         applied, apply_output = apply_patch_text(patch_text, scenario_output_path(scenario_name, "patch.diff"))
         if not applied:
@@ -2227,6 +2374,16 @@ def run_demo(
         print()
 
         if tests_passed:
+            if regression_guard:
+                regression_ok, regression_output = run_test_targets(regression_guard)
+                if not regression_ok:
+                    print("Regression check failed: the fix broke previously-green tests:\n")
+                    print(regression_output)
+                    restore_files(backups)
+                    print("\nChange rejected and repository restored for the next attempt.\n")
+                    time.sleep(1)
+                    continue
+                print("Regression check passed: no previously-green test regressed.")
             print("Tests passed. Change accepted.\n")
             accepted_backups = backups
             break
@@ -2539,7 +2696,15 @@ def main() -> int:
         if not patch_path.exists():
             print(f"Patch file not found: {patch_path}")
             return 1
-        applied, output = apply_patch_text(patch_path.read_text(), patch_path)
+        patch_text = patch_path.read_text()
+        protected = patch_protected_targets(patch_text)
+        if protected:
+            print(
+                "Patch rejected: it would modify protected files that are treated as "
+                "the immutable contract: " + ", ".join(protected)
+            )
+            return 1
+        applied, output = apply_patch_text(patch_text, patch_path)
         print(output or "Patch applied.")
         return 0 if applied else 1
 
